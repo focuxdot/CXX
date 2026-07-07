@@ -87,7 +87,7 @@ curl -fsSL https://github.com/focuxdot/CXX/releases/latest/download/install.sh |
 ### Windows 一条命令安装（PowerShell）
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/focuxdot/CXX/releases/latest/download/install.ps1 | iex"
+irm https://github.com/focuxdot/CXX/releases/latest/download/install.ps1 | iex
 ```
 
 安装脚本会下载最新 GitHub Release 里的 Windows 安装包，校验 `checksums.txt` 后静默安装并打开配对窗口。也可以手动下载：

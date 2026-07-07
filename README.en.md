@@ -87,7 +87,7 @@ The installer downloads the latest macOS package from GitHub Releases, verifies 
 ### One-command install (Windows PowerShell)
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/focuxdot/CXX/releases/latest/download/install.ps1 | iex"
+irm https://github.com/focuxdot/CXX/releases/latest/download/install.ps1 | iex
 ```
 
 The installer downloads the latest Windows package from GitHub Releases, verifies it against `checksums.txt`, installs it silently, and opens the pairing window. Manual download:
