@@ -12,7 +12,7 @@
 // raw entries lives on the web side's separate render path.
 import { spawn } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { createServer } from "node:http";
 import { homedir, tmpdir } from "node:os";
@@ -46,12 +46,32 @@ const HEAD_BYTES = 64 * 1024;
 // yields no cwd/preview we re-read up to this cap before falling back to the tail.
 const HEAD_MAX_BYTES = 512 * 1024;
 const TAIL_BYTES = 64 * 1024;
+const MODEL_LIST_CACHE_MS = 5 * 60 * 1000;
+const MODEL_LIST_TIMEOUT_MS = 8000;
+const MODEL_SCAN_LIMIT = 200;
+const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/;
+const CLAUDE_MODEL_EFFORTS = ["low", "medium", "high", "xhigh"];
+const CLAUDE_ALLOWED_EFFORTS = new Set([...CLAUDE_MODEL_EFFORTS, "max"]);
+const CLAUDE_FALLBACK_MODELS = [
+  { id: "claude-opus-4-8", displayName: "Opus 4.8" },
+  { id: "claude-sonnet-5", displayName: "Sonnet 5" },
+  { id: "claude-haiku-4-5", displayName: "Haiku 4.5" },
+];
+const CLAUDE_DEFAULT_MODEL_CANDIDATES = [
+  "claude-opus-4-8",
+  "claude-sonnet-5",
+  "claude-haiku-4-5",
+];
 
 // Base config dir honours CLAUDE_CONFIG_DIR (same override Claude Code itself uses),
 // defaulting to ~/.claude. Sessions live under <base>/projects/<slug>/<uuid>.jsonl.
-function claudeProjectsDir() {
+function claudeConfigDir() {
   const base = process.env.CLAUDE_CONFIG_DIR?.trim() || join(homedir(), ".claude");
-  return join(base, "projects");
+  return base;
+}
+
+function claudeProjectsDir() {
+  return join(claudeConfigDir(), "projects");
 }
 
 // Pull the first plain-text user prompt out of a parsed head, plus cwd/gitBranch.
@@ -75,6 +95,115 @@ function looksLikePrompt(text) {
   return true;
 }
 
+function firstString(...values) {
+  for (const v of values) {
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return "";
+}
+
+function isUsableModelId(id) {
+  return typeof id === "string" && MODEL_ID_RE.test(id) && id !== "<synthetic>";
+}
+
+function readClaudeSettings() {
+  try {
+    return JSON.parse(readFileSync(join(claudeConfigDir(), "settings.json"), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function claudeLocalConfig() {
+  const settings = readClaudeSettings();
+  const settingsEnv = settings?.env && typeof settings.env === "object" ? settings.env : {};
+  return { settings, env: { ...settingsEnv, ...process.env } };
+}
+
+function modelListUrl(baseUrl) {
+  const url = new URL(baseUrl);
+  const path = url.pathname.replace(/\/+$/, "");
+  url.pathname = `${path.endsWith("/v1") ? path : `${path}/v1`}/models`;
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+function configuredDefaultModel(settings, env) {
+  return firstString(
+    settings?.model,
+    settings?.defaultModel,
+    settings?.modelConfig?.model,
+    env.CLAUDE_CODE_MODEL,
+    env.CLAUDE_MODEL,
+    env.ANTHROPIC_MODEL,
+  );
+}
+
+function modelIdsFromItem(item) {
+  return [
+    item?.message?.model,
+    item?.model,
+    item?.model_id,
+    item?.modelId,
+    item?.request?.model,
+    item?.response?.model,
+  ].filter(isUsableModelId);
+}
+
+function normalizeModel(raw) {
+  const id = firstString(raw?.id, raw?.model, raw?.name);
+  if (!isUsableModelId(id)) return null;
+  const displayName = firstString(raw?.displayName, raw?.display_name, raw?.display, raw?.label);
+  const description = firstString(raw?.description);
+  return {
+    ...raw,
+    id,
+    model: id,
+    displayName: displayName || displayNameForModelId(id) || id,
+    description: description || raw?.description || "",
+    supportedReasoningEfforts: CLAUDE_MODEL_EFFORTS.map((reasoningEffort) => ({ reasoningEffort })),
+    defaultReasoningEffort: raw?.defaultReasoningEffort ?? null,
+  };
+}
+
+function displayNameForModelId(id) {
+  const spaced = String(id || "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  const claude = spaced.match(/\b(?:claude\s+)?(fable|opus|sonnet|haiku)\s+(\d+)(?:[\s.]+(\d+))?\b/i);
+  if (claude) {
+    const tier = claude[1][0].toUpperCase() + claude[1].slice(1).toLowerCase();
+    return `${tier} ${claude[2]}${claude[3] ? `.${claude[3]}` : ""}`;
+  }
+  const gpt = spaced.match(/\bgpt\s+(\d+)(?:[\s.]+(\d+))?(?:\s+([a-z][a-z0-9]*))?\b/i);
+  if (gpt) {
+    const suffix = gpt[3] ? ` ${gpt[3][0].toUpperCase()}${gpt[3].slice(1).toLowerCase()}` : "";
+    return `GPT ${gpt[1]}${gpt[2] ? `.${gpt[2]}` : ""}${suffix}`;
+  }
+  const deepseek = spaced.match(/\bdeepseek\s+v?(\d+)(?:\s+([a-z][a-z0-9]*))?\b/i);
+  if (deepseek) {
+    const suffix = deepseek[2] ? ` ${deepseek[2][0].toUpperCase()}${deepseek[2].slice(1).toLowerCase()}` : "";
+    return `DeepSeek V${deepseek[1]}${suffix}`;
+  }
+  return "";
+}
+
+function mergeModels(groups, defaultId) {
+  const seen = new Set();
+  const out = [];
+  for (const group of groups) {
+    for (const raw of group) {
+      const model = normalizeModel(raw);
+      if (!model || seen.has(model.id)) continue;
+      seen.add(model.id);
+      out.push(model);
+    }
+  }
+  const pickedDefault = defaultId && seen.has(defaultId)
+    ? defaultId
+    : CLAUDE_DEFAULT_MODEL_CANDIDATES.find((id) => seen.has(id)) ?? out[0]?.id;
+  return out.map((m) => ({ ...m, isDefault: m.id === pickedDefault }));
+}
+
 export class ClaudeBackend {
   #command;
   #log;
@@ -93,6 +222,7 @@ export class ClaudeBackend {
   #pendingCwd = new Map();
   // Default headless permission mode passed to `claude -p`.
   #defaultPermissionMode;
+  #modelCache = null;
 
   // —— approval routing (PreToolUse hook → localhost endpoint → phone) ——
   #approvalServer = null;
@@ -479,6 +609,7 @@ export class ClaudeBackend {
       "--verbose",
     ];
     if (typeof overrides?.model === "string" && overrides.model) args.push("--model", overrides.model);
+    if (CLAUDE_ALLOWED_EFFORTS.has(overrides?.effort)) args.push("--effort", overrides.effort);
     const permMode = this.#permissionModeFor(overrides);
     if (permMode) args.push("--permission-mode", permMode);
     // Install the PreToolUse approval hook so gated tools route to the phone. Full access
@@ -597,19 +728,82 @@ export class ClaudeBackend {
     return { type: "user", message: { role: "user", content } };
   }
 
-  // Generic RPC shim. model/list returns a small static Claude roster so the phone's
-  // model picker isn't empty; unsupported experimental methods (goal, etc.) no-op.
-  request(method) {
-    if (method === "model/list") {
-      return Promise.resolve({
-        data: [
-          { id: "claude-opus-4-8", model: "claude-opus-4-8", displayName: "Opus 4.8", isDefault: true },
-          { id: "claude-sonnet-5", model: "claude-sonnet-5", displayName: "Sonnet 5" },
-          { id: "claude-haiku-4-5", model: "claude-haiku-4-5", displayName: "Haiku 4.5" },
-        ],
-      });
+  async #configuredModels() {
+    const { env } = claudeLocalConfig();
+    const baseUrl = firstString(env.ANTHROPIC_BASE_URL);
+    if (!baseUrl) return [];
+    const headers = { accept: "application/json", "anthropic-version": "2023-06-01" };
+    if (env.ANTHROPIC_AUTH_TOKEN) headers.authorization = `Bearer ${env.ANTHROPIC_AUTH_TOKEN}`;
+    if (env.ANTHROPIC_API_KEY) headers["x-api-key"] = env.ANTHROPIC_API_KEY;
+
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), MODEL_LIST_TIMEOUT_MS);
+    try {
+      const res = await fetch(modelListUrl(baseUrl), { headers, signal: ac.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = await res.json();
+      const items = Array.isArray(body?.data) ? body.data : Array.isArray(body?.models) ? body.models : [];
+      return items.map((m) => ({
+        id: m.id ?? m.model ?? m.name,
+        model: m.id ?? m.model ?? m.name,
+        displayName: m.displayName ?? m.display_name ?? m.name,
+        description: m.description,
+      }));
+    } catch (err) {
+      this.#log(`读取 Claude 本机模型接口失败，改用本地历史/兜底: ${err.message}`);
+      return [];
+    } finally {
+      clearTimeout(timer);
     }
-    return Promise.resolve({});
+  }
+
+  async #historyModels() {
+    const seen = new Set();
+    const out = [];
+    for (const session of this.#allSessions().slice(0, MODEL_SCAN_LIMIT)) {
+      let handle;
+      try {
+        handle = await open(session.path, "r");
+        const info = await handle.stat();
+        if (info.size <= 0) continue;
+        const len = Math.min(TAIL_BYTES, info.size);
+        const buf = Buffer.alloc(len);
+        await handle.read(buf, 0, len, info.size - len);
+        for (const item of parseJsonlChunk(buf.toString("utf8")).items) {
+          for (const id of modelIdsFromItem(item)) {
+            if (seen.has(id)) continue;
+            seen.add(id);
+            out.push({ id, model: id });
+          }
+        }
+      } catch {
+        // Ignore corrupt or concurrently-written session files.
+      } finally {
+        await handle?.close();
+      }
+    }
+    return out;
+  }
+
+  async #models() {
+    const now = Date.now();
+    if (this.#modelCache && now - this.#modelCache.at < MODEL_LIST_CACHE_MS) return this.#modelCache.data;
+    const { settings, env } = claudeLocalConfig();
+    const defaultModel = configuredDefaultModel(settings, env);
+    const [configured, history] = await Promise.all([this.#configuredModels(), this.#historyModels()]);
+    const explicitDefault = isUsableModelId(defaultModel) ? [{ id: defaultModel, model: defaultModel }] : [];
+    const data = mergeModels([configured, history, explicitDefault, CLAUDE_FALLBACK_MODELS], defaultModel);
+    this.#modelCache = { at: now, data };
+    return data;
+  }
+
+  // Generic RPC shim. model/list prefers the local Claude Code configuration
+  // (ANTHROPIC_BASE_URL / token), then local session history, then a tiny fallback.
+  async request(method) {
+    if (method === "model/list") {
+      return { data: await this.#models() };
+    }
+    return {};
   }
 
   // —— approval endpoint plumbing ——
