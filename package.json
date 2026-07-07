@@ -14,9 +14,12 @@
     "notify": "node daemon/src/main.mjs notify",
     "relay": "node relay/node/server.mjs",
     "smoke": "node scripts/smoke.mjs",
+    "test": "node --test",
     "check:schema": "node scripts/check-schema.mjs",
     "check:schema:update": "node scripts/check-schema.mjs --update",
     "build:sea": "node scripts/build-sea.mjs",
-    "build:app": "node scripts/build-app.mjs"
+    "build:app": "node scripts/build-app.mjs",
+    "build:win": "powershell -ExecutionPolicy Bypass -File scripts/build-win.ps1",
+    "build:win:installer": "powershell -ExecutionPolicy Bypass -File scripts/build-win-installer.ps1"
   }
 }

@@ -32,6 +32,7 @@ import { privateKeyFromPem } from "./crypto.mjs";
 import { Notifier, normalizeNotifier, redact } from "./notify.mjs";
 import { MENU_COMMANDS, runMenuCommand } from "./menu-backend.mjs";
 import { makeDeps as makeMacAgentDeps } from "./mac-agent.mjs";
+import { makeDeps as makeWinAgentDeps } from "./win-agent.mjs";
 import { PowerManager } from "./power.mjs";
 import { RelayLink } from "./relay-link.mjs";
 import { SessionHub } from "./session-hub.mjs";
@@ -58,6 +59,22 @@ function log(message) {
       // 落盘失败不影响 daemon 运行
     }
   }
+}
+
+function makeMenuDeps({ configPath }) {
+  const base = {
+    configPath,
+    log: (m) => process.stderr.write(`${m}\n`),
+  };
+  if (process.platform === "darwin") return makeMacAgentDeps(base);
+  if (process.platform === "win32") return makeWinAgentDeps(base);
+  return {
+    ...base,
+    isEnabled: () => false,
+    isRunning: () => false,
+    enable: () => ({ ok: false, enabled: false, error: "仅支持 macOS / Windows" }),
+    disable: () => ({ ok: true, enabled: false }),
+  };
 }
 
 // emit: 可选的结构化事件回调（IPC 模式下由 --ipc 提供，写 stdout JSON 行）。
@@ -574,14 +591,11 @@ export async function main() {
   const command = positionals[0] ?? "start";
   const configPath = values.config ?? defaultConfigPath();
 
-  // 菜单栏壳的 per-action 后端（Model A）：argv 子命令进 → 单行 JSON 出。
-  // enable/disable 走 mac-agent（launchd）；其余读改 config，运行中的 daemon 靠
+  // 桌面壳的 per-action 后端（Model A）：argv 子命令进 → 单行 JSON 出。
+  // enable/disable 走平台 keepalive（macOS launchd / Windows 计划任务）；其余读改 config，运行中的 daemon 靠
   // config-watch 热核对。stdout 必须是纯 JSON，日志改走 stderr。
   if (MENU_COMMANDS.has(command)) {
-    const deps = makeMacAgentDeps({
-      configPath,
-      log: (m) => process.stderr.write(`${m}\n`),
-    });
+    const deps = makeMenuDeps({ configPath });
     const result = await runMenuCommand(command, positionals.slice(1), deps);
     process.stdout.write(`${JSON.stringify(result)}\n`);
     return;

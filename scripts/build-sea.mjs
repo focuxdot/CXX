@@ -24,6 +24,7 @@ const outDir = join(root, "dist", "sea");
 const cacheDir = join(root, "dist", ".node-cache");
 const isWin = process.platform === "win32";
 const binName = isWin ? "cxx-daemon.exe" : "cxx-daemon";
+const npx = isWin ? "npx.cmd" : "npx";
 const binPath = join(outDir, binName);
 const bundlePath = join(outDir, "bundle.cjs");
 const blobPath = join(outDir, "cxx-daemon.blob");
@@ -32,7 +33,23 @@ const FUSE = "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2";
 
 function run(cmd, args, opts = {}) {
   console.log(`$ ${cmd} ${args.join(" ")}`);
+  if (process.platform === "win32" && /\.(?:cmd|bat)$/i.test(cmd)) {
+    const quote = (a) => `"${String(a).replaceAll('"', '""')}"`;
+    const commandLine = [cmd, ...args.map(quote)].join(" ");
+    return execFileSync(process.env.ComSpec || "cmd.exe", ["/d", "/c", commandLine], {
+      stdio: "inherit",
+      ...opts,
+    });
+  }
   return execFileSync(cmd, args, { stdio: "inherit", ...opts });
+}
+
+function runNpx(args) {
+  if (isWin) {
+    const cli = join(dirname(process.execPath), "node_modules", "npm", "bin", "npx-cli.js");
+    if (existsSync(cli)) return run(process.execPath, [cli, ...args]);
+  }
+  return run(npx, args);
 }
 
 // Return the path to an official Node binary matching this version/arch, downloading
@@ -74,7 +91,7 @@ mkdirSync(outDir, { recursive: true });
 
 // 1. bundle ESM -> single CJS. --format=cjs is required: SEA runs the main as CommonJS.
 console.log("→ bundling daemon with esbuild ...");
-run("npx", [
+runNpx([
   "--yes",
   "esbuild",
   join(root, "daemon", "sea", "entry.mjs"),
@@ -124,7 +141,7 @@ const postjectArgs = [
   FUSE,
 ];
 if (process.platform === "darwin") postjectArgs.push("--macho-segment-name", "NODE_SEA");
-run("npx", postjectArgs);
+runNpx(postjectArgs);
 
 if (process.platform === "darwin") {
   // Ad-hoc sign for local runs. Release builds re-sign with a Developer ID in the

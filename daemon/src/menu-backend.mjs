@@ -26,6 +26,7 @@
 //   notify-test [inputFile]     -> { ok, count }     (tests the unsaved entry in inputFile)
 //   notify-test-index <index>   -> { ok, count }     (tests the saved channel at index)
 import { existsSync, readFileSync } from "node:fs";
+import { platform, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import {
@@ -37,6 +38,7 @@ import {
   saveConfig,
 } from "./config.mjs";
 import { Notifier, normalizeNotifier, redact } from "./notify.mjs";
+import { writeQrBmp } from "./qr-bmp.mjs";
 
 export function status(deps) {
   const config = existsSync(deps.configPath) ? loadOrCreateConfig(deps.configPath) : null;
@@ -54,7 +56,7 @@ export function pair(deps) {
   const config = loadOrCreateConfig(deps.configPath);
   if (!config.relayUrl) return { error: "未配置 relay" };
   const { deviceToken } = issueDeviceToken(deps.configPath, config);
-  return { url: deviceUrl(loadOrCreateConfig(deps.configPath), deviceToken) };
+  return maybeAttachQr({ url: deviceUrl(loadOrCreateConfig(deps.configPath), deviceToken) }, deps);
 }
 
 // 一次性链接：5 分钟内有效、仅可用一次（适合临时发出去的场景）
@@ -62,7 +64,17 @@ export function pairOnce(deps) {
   const config = loadOrCreateConfig(deps.configPath);
   if (!config.relayUrl) return { error: "未配置 relay" };
   const token = issuePairToken(deps.configPath, config);
-  return { url: pairUrl(loadOrCreateConfig(deps.configPath), token) };
+  return maybeAttachQr({ url: pairUrl(loadOrCreateConfig(deps.configPath), token) }, deps);
+}
+
+function maybeAttachQr(result, deps) {
+  if ((deps.platform || platform()) !== "win32" || !result?.url) return result;
+  try {
+    result.qrPath = writeQrBmp(result.url, join(tmpdir(), `cxx-qr-${process.pid}-${Date.now()}.bmp`));
+  } catch (err) {
+    deps.log?.(`qr 生成失败: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  return result;
 }
 
 // 在线观众数：daemon 在观众上下线时把按 deviceId 聚合的计数节流写入 viewer-status.json

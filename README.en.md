@@ -84,10 +84,18 @@ The installer downloads the latest macOS package from GitHub Releases, verifies 
 - [install.sh](https://github.com/focuxdot/CXX/releases/latest/download/install.sh)
 - [CXX-macos.dmg](https://github.com/focuxdot/CXX/releases/latest/download/CXX-macos.dmg)
 
-### For users: the macOS menu-bar app
+### Windows installer
+
+Download and run:
+
+- [CXX-win-x64.exe](https://github.com/focuxdot/CXX/releases/latest/download/CXX-win-x64.exe)
+
+After installation, open **CXX** from the desktop or Start menu. It opens the pairing window directly. The background daemon lives under the install directory's `resources` folder; the user-facing entry point is `CXX.exe`.
+
+### For users: the desktop app
 
 > [!NOTE]
-> Windows / Linux support is architected and will follow. The phone side is a web page — iOS, Android, and any in-app browser all work.
+> macOS / Windows are available; Linux support is architected and will follow. The phone side is a web page — iOS, Android, and any in-app browser all work.
 
 1. **Launch the menu-bar app**. Remote is off on first run; the UI shows Chinese or English following your system language.
 2. Click the menu-bar icon → **Pair a device…**: the first click implicitly turns remote on (installs a resident LaunchAgent and starts the daemon; Codex is enabled by default, and Claude Code is added to the switcher when detected) → **shows the pairing QR**.

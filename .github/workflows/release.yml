@@ -48,22 +48,56 @@ jobs:
           cp "dist/CXX-${VERSION}.dmg" release-assets/CXX-macos.dmg
           cp "dist/CXX-${VERSION}.dmg" "release-assets/CXX-${VERSION}-macos.dmg"
           cp packaging/install.sh release-assets/install.sh
-          (cd release-assets && rm -f checksums.txt && for f in *; do [ "$f" = "checksums.txt" ] && continue; shasum -a 256 "$f"; done > checksums.txt)
       - uses: actions/upload-artifact@v4
         with:
-          name: release-assets
+          name: release-assets-macos
+          path: release-assets/*
+          if-no-files-found: error
+
+  build-windows:
+    needs: verify
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Build Windows app and installer
+        shell: pwsh
+        run: |
+          .\scripts\build-win.ps1
+          .\scripts\build-win-installer.ps1
+      - name: Prepare release assets
+        shell: pwsh
+        run: |
+          $Version = (Get-Content -Raw package.json | ConvertFrom-Json).version
+          New-Item -ItemType Directory -Force release-assets | Out-Null
+          Copy-Item "dist\win\installer\CXX-$Version-win-x64.exe" "release-assets\CXX-win-x64.exe"
+          Copy-Item "dist\win\installer\CXX-$Version-win-x64.exe" "release-assets\CXX-$Version-win-x64.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-windows
           path: release-assets/*
           if-no-files-found: error
 
   publish:
-    needs: build-macos
+    needs:
+      - build-macos
+      - build-windows
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: release-assets
+          pattern: release-assets-*
           path: release-assets
+          merge-multiple: true
+      - name: Generate checksums
+        run: |
+          set -euo pipefail
+          (cd release-assets && rm -f checksums.txt && for f in *; do [ "$f" = "checksums.txt" ] && continue; sha256sum "$f"; done > checksums.txt)
       - name: Resolve release metadata
         id: meta
         run: |
