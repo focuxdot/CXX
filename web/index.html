@@ -411,13 +411,14 @@ try {
   .todos .titem.doing .tmark { color: var(--accent); }
   .todos .titem.doing .ttxt { color: var(--text); font-weight: 600; }
   .todos .titem.todo .ttxt { color: var(--text); }
-  /* Claude 活动行：跟随内容滚动、待在信息流末尾的一行实时状态 */
+  /* 活动行：跟随内容滚动、待在信息流末尾的一行实时状态 */
   #actline { display: flex; align-items: center; margin: 12px 2px 14px; font-size: 13.5px; color: var(--dim); }
   #actline .amid { color: var(--text); }
   #actline .acnt { color: var(--dim); font-variant-numeric: tabular-nums; }
-  /* Claude 轮次收尾总结行（对标终端底部 ✳ Worked for 1m23s）：钉在该轮内容最下方 */
-  .turnsum { margin: 6px 2px 16px; font-size: 12.5px; color: var(--dim); opacity: .75;
-             font-variant-numeric: tabular-nums; }
+  /* Claude 轮次收尾总结行：钉在该轮内容最下方，图标复用通用状态点 */
+  .turnsum { display: flex; align-items: center; margin: 6px 2px 16px; font-size: 12.5px;
+             color: var(--dim); opacity: .75; font-variant-numeric: tabular-nums; }
+  .turnsum .pulse { animation: none; opacity: .7; }
   /* diff 着色 */
   .dfile { font-weight: 600; margin: 8px 0 3px; }
   .dfile:first-child { margin-top: 0; }
@@ -940,7 +941,7 @@ const I18N = {
     "act.edit": "编辑文件", "act.task": "运行子任务", "act.todo": "更新计划",
     "act.think": "思考中", "act.reply": "回复中", "act.work": "处理中",
     "todo.title": "计划",
-    "turn.done": "✳ 已处理 {0}",
+    "turn.done": "已处理 {0}",
     "dur.sec": "{0} 秒",
     "dur.minsec": "{0} 分 {1} 秒",
     "strip.watchingN": "{0} 人围观中",
@@ -1225,7 +1226,7 @@ const I18N = {
     "act.edit": "Editing", "act.task": "Running subtask", "act.todo": "Updating plan",
     "act.think": "Thinking", "act.reply": "Responding", "act.work": "Working",
     "todo.title": "Plan",
-    "turn.done": "✳ Worked for {0}",
+    "turn.done": "Worked for {0}",
     "dur.sec": "{0}s",
     "dur.minsec": "{0}m {1}s",
     "strip.watchingN": (n) => `${n} watching`,
@@ -2642,12 +2643,12 @@ const app = {
   driver: null,        // 运行驱动方："daemon"（手机可停止）| "desktop"（只可看）| null
   agent: "codex",      // 当前后端：codex | claude（多 agent 下拉切换，daemon 按此路由；缺省 codex）
   agents: [],          // agents.list 结果：[{id,healthy,...}]，<2 项时切换器隐藏
-  // —— Claude 会话专用（Codex 会话下全程 null/0/false，不参与其渲染）——
-  turnTok: 0,          // 本轮累计 output token（活动行 ↑N tokens）
-  tokSeen: null,       // 已计入的 message.id 集合（一响应多行共享 id，按此去重；rising edge 重建）
+  // —— 活动行状态（Codex / Claude 共用；token/Todo/idle 细节仍是 Claude 专用）——
+  turnTok: 0,          // Claude 本轮累计 output token（活动行 ↑N tokens）
+  tokSeen: null,       // Claude 已计入的 message.id 集合（一响应多行共享 id，按此去重；rising edge 重建）
   actVerb: "",         // 活动行当前动词（随最新块动态：思考/执行命令/编辑…）
   turnStartTs: 0,      // 本轮真实起点=最近一条非 tool_result 用户消息时间戳（耗时锚，跨空闲不漂）
-  turnSummarized: false, // 本轮是否已钉"✳ 已处理 Xs"总结行（rising edge 重置）
+  turnSummarized: false, // 本轮是否已钉"已处理 Xs"总结行（rising edge 重置）
   claudeIdle: null,    // 桌面驱动 Claude 会话的运行态空闲兜底定时器
   todoNode: null,      // 流末尾计划清单 DOM（TodoWrite 就地更新）
   todoCalls: new Set(), // TodoWrite 的 tool_use id 集合（吞掉其 tool_result 回执噪音）
@@ -5407,11 +5408,11 @@ function updateTodos(todos) {
   $("log").appendChild(app.todoNode); // 移到流末尾（活动行随后再追加到它之后）
 }
 
-// 信息流末尾的实时活动行：● 当前动词… 耗时 · ↑token（仅 Claude 运行中）
+// 信息流末尾的实时活动行：● 当前动词… 耗时；Claude 额外显示本轮输出 token
 function updateActLine() {
   const log = $("log");
   let el = $("actline");
-  if (!(app.agent === "claude" && app.running && app.view === "session")) {
+  if (!(app.running && app.view === "session")) {
     el?.remove();
     return;
   }
@@ -5422,11 +5423,11 @@ function updateActLine() {
   }
   log.appendChild(el); // 始终居于信息流最末
   el.querySelector(".amid").textContent = `${app.actVerb || t("act.work")}…`;
-  const tok = app.turnTok > 0 ? ` · ↑${fmtTok(app.turnTok)} tokens` : ""; // 对标 Claude Code：↑ + tokens 单位
+  const tok = app.agent === "claude" && app.turnTok > 0 ? ` · ↑${fmtTok(app.turnTok)} tokens` : ""; // 对标 Claude Code：↑ + tokens 单位
   el.querySelector(".acnt").textContent = ` ${fmtDur(turnElapsed())}${tok}`;
 }
 
-// Claude 一轮收尾总结节点（对标终端每轮尾部 ✳ Worked for）：耗时优先用时间戳算——本轮起点
+// Claude 一轮收尾总结节点：耗时优先用时间戳算——本轮起点
 // （turnStartTs=该轮首条用户消息 ts）到收尾 assistant（end_turn）的 ts，故历史/回放的已完成轮也能显；
 // 缺时间戳则回落 turnElapsed（实时轮 ≈ now）。渲染时逐轮就地钉在该轮回复下方，多轮各有一条。
 function turnSummaryNode(endTs) {
@@ -5439,7 +5440,11 @@ function turnSummaryNode(endTs) {
   if (!(ms >= 1000)) return null;
   const el = document.createElement("div");
   el.className = "turnsum";
-  el.textContent = t("turn.done", fmtDur(ms));
+  const dot = document.createElement("span");
+  dot.className = "pulse";
+  const text = document.createElement("span");
+  text.textContent = t("turn.done", fmtDur(ms));
+  el.append(dot, text);
   return el;
 }
 
@@ -5476,6 +5481,40 @@ function trackClaudeActivity(item, live) {
     } else if (bt === "text" && String(b.text || "").trim()) {
       app.actVerb = t("act.reply");
     }
+  }
+}
+
+function codexToolVerb(name) {
+  const n = String(name || "").toLowerCase();
+  if (EXEC_NAME_RE.test(n)) return t("act.bash");
+  if (/apply|patch|edit|write|diff|file/.test(n)) return t("act.edit");
+  if (/web|fetch|search/.test(n)) return t("act.web");
+  if (/read|glob|grep|list|ls|find/.test(n)) return t("act.search");
+  if (/task|agent/.test(n)) return t("act.task");
+  return t("act.work");
+}
+
+function trackCodexActivity(item) {
+  if (app.agent !== "codex" || !app.running || app.loadingEarlier) return;
+  const ty = item?.type;
+  const p = item?.payload ?? {};
+  if (ty === "event_msg") {
+    const pt = p.type;
+    if (pt === "agent_message") app.actVerb = t("act.reply");
+    else if (pt === "patch_apply_end") app.actVerb = t("act.edit");
+    else if (pt === "web_search_end") app.actVerb = t("act.web");
+    else if (pt === "exec_command_begin") app.actVerb = t("act.bash");
+    else if (pt === "task_started") app.actVerb = t("act.work");
+    return;
+  }
+  if (ty !== "response_item") return;
+  const pt = String(p.type || "").toLowerCase();
+  if (pt === "function_call" || pt === "custom_tool_call") {
+    app.actVerb = codexToolVerb(p.name);
+  } else if (pt.includes("reasoning")) {
+    app.actVerb = t("act.think");
+  } else if (pt === "image_generation_call") {
+    app.actVerb = t("act.work");
   }
 }
 
@@ -5576,7 +5615,7 @@ function renderInto(items, live = false) {
       trackClaudeActivity(item, live); // 活动行动词 + 最新计划；token 仅 live 增量累计
       for (const b of claudeItemToBubbles(item)) emitBubble(b, item);
       // 该轮收尾（assistant end_turn）→ 就地在回复下方钉一行本轮总结（历史/实时统一，时间戳算耗时），
-      // 再清起点让下一轮重设。终端式 scrollback：多轮各有一条 ✳，不再只钉最后一轮在底部。
+      // 再清起点让下一轮重设。终端式 scrollback：多轮各有一条总结，不再只钉最后一轮在底部。
       if ((item.message?.role || item.type) === "assistant" && item.message?.stop_reason === "end_turn") {
         markAssistantFinal(lastAssistantNode);
         const sum = turnSummaryNode(item.timestamp);
@@ -5604,6 +5643,7 @@ function renderInto(items, live = false) {
       }
       else if (pt === "token_count") setCtx(item.payload?.info);
     }
+    trackCodexActivity(item);
     emitBubble(itemToBubble(item), item);
   }
   // 桌面驱动 Claude：本批含 end_turn（本轮最终回复）→ 收尾运行态，等价 daemon 的 turn/completed。
@@ -5883,7 +5923,11 @@ function onLive(event, params) {
   if (norm.includes("turnaborted")) { setRunning(false); endStream(); procFinish(null, true); return; }
   if (norm.includes("agentmessage") && norm.includes("delta")) {
     const delta = params?.delta ?? params?.text ?? params?.chunk;
-    if (typeof delta === "string" && delta) appendStream(delta);
+    if (typeof delta === "string" && delta) {
+      app.actVerb = t("act.reply");
+      updateActLine();
+      appendStream(delta);
+    }
   }
 }
 
