@@ -156,10 +156,10 @@ try {
              cursor: pointer; padding: 0; }
   #menubtn:active { background: var(--border); }
   body.insession #menubtn, body:not(.paired) #menubtn { display: none; }
-  /* ⋯ 菜单：组织方式 + 管理 */
+  /* ⋯ 菜单：组织方式 + 外观/字体/语言 + 管理 */
   #topmenu { display: none; position: fixed; right: 10px; top: 58px; z-index: 45;
              background: var(--raised); border: 1px solid var(--border); border-radius: 16px;
-             padding: 6px; min-width: 210px; box-shadow: 0 10px 32px rgba(0,0,0,.35); }
+             padding: 6px; min-width: 230px; box-shadow: 0 10px 32px rgba(0,0,0,.35); }
   #topmenu.open { display: block; }
   #topmenu .mlabel { font-size: 12px; color: var(--dim); padding: 8px 14px 2px; }
   #topmenu button { display: flex; align-items: center; gap: 12px; width: 100%; border: none;
@@ -168,6 +168,17 @@ try {
   #topmenu button:active { background: var(--sunken); }
   #topmenu button svg { flex: none; }
   #topmenu .mck { margin-left: auto; color: var(--accent); }
+  #topmenu .mseg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px;
+                   margin: 2px 4px 8px; border: 1px solid var(--border); border-radius: 12px;
+                   background: var(--sunken); }
+  #topmenu .mseg button { justify-content: center; gap: 7px; min-width: 0; padding: 9px 8px;
+                          border-radius: 8px; color: var(--dim); }
+  #topmenu .mseg button span:not(.mck) { min-width: 0; white-space: nowrap; overflow: hidden;
+                                         text-overflow: ellipsis; }
+  #topmenu .mseg button .mck { margin-left: 0; min-width: 10px; font-weight: 700; }
+  #topmenu .mseg button.sel { background: var(--raised); color: var(--text);
+                              box-shadow: inset 0 0 0 1px var(--border), 0 1px 8px rgba(0,0,0,.16); }
+  #topmenu .mseg button.sel svg, #topmenu .mseg button.sel .mck { color: var(--accent); }
   #topmenu hr { border: none; border-top: 1px solid var(--border); margin: 6px 8px; }
 
   /* 底部弹层（切换电脑 / 选择目录共用） */
@@ -661,18 +672,22 @@ try {
   <button data-act="time" class="m-full"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span data-i18n="organize.time">时间线</span><span class="mck" id="cktime"></span></button>
   <hr class="m-full">
   <div class="mlabel" data-i18n="menu.appearance">外观</div>
-  <button data-act="th-auto"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg><span data-i18n="theme.auto">跟随系统</span><span class="mck" id="ckthauto"></span></button>
-  <button data-act="th-light"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg><span data-i18n="theme.light">浅色</span><span class="mck" id="ckthlight"></span></button>
-  <button data-act="th-dark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg><span data-i18n="theme.dark">深色</span><span class="mck" id="ckthdark"></span></button>
+  <div class="mseg" role="group" data-i18n-aria="menu.appearance" aria-label="外观">
+    <button data-act="th-light"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg><span data-i18n="theme.light">浅色</span><span class="mck" id="ckthlight"></span></button>
+    <button data-act="th-dark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg><span data-i18n="theme.dark">深色</span><span class="mck" id="ckthdark"></span></button>
+  </div>
   <hr>
   <div class="mlabel" data-i18n="menu.font">字体</div>
-  <button data-act="fs-normal"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg><span data-i18n="font.normal">常规</span><span class="mck" id="ckfsnormal"></span></button>
-  <button data-act="fs-large"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13h6"/><path d="m2 16 4.5-9 4.5 9"/><path d="M18 16V7"/><path d="m14 11 4-4 4 4"/></svg><span data-i18n="font.large">大号</span><span class="mck" id="ckfslarge"></span></button>
+  <div class="mseg" role="group" data-i18n-aria="menu.font" aria-label="字体">
+    <button data-act="fs-normal"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg><span data-i18n="font.normal">常规</span><span class="mck" id="ckfsnormal"></span></button>
+    <button data-act="fs-large"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13h6"/><path d="m2 16 4.5-9 4.5 9"/><path d="M18 16V7"/><path d="m14 11 4-4 4 4"/></svg><span data-i18n="font.large">大号</span><span class="mck" id="ckfslarge"></span></button>
+  </div>
   <hr>
   <div class="mlabel" data-i18n="menu.language">语言</div>
-  <button data-act="lang-auto"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg><span data-i18n="lang.auto">跟随系统</span><span class="mck" id="cklangauto"></span></button>
-  <button data-act="lang-zh"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"/><path d="M9 3v2c0 6-2 9-5 11"/><path d="M9 8c1 4 3 6 6 7"/><path d="M14 21l4-9 4 9"/><path d="M15.5 18h5"/></svg>中文<span class="mck" id="cklangzh"></span></button>
-  <button data-act="lang-en"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"/><path d="M9 3v2c0 6-2 9-5 11"/><path d="M9 8c1 4 3 6 6 7"/><path d="M14 21l4-9 4 9"/><path d="M15.5 18h5"/></svg>English<span class="mck" id="cklangen"></span></button>
+  <div class="mseg" role="group" data-i18n-aria="menu.language" aria-label="语言">
+    <button data-act="lang-zh"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"/><path d="M9 3v2c0 6-2 9-5 11"/><path d="M9 8c1 4 3 6 6 7"/><path d="M14 21l4-9 4 9"/><path d="M15.5 18h5"/></svg><span>中文</span><span class="mck" id="cklangzh"></span></button>
+    <button data-act="lang-en"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"/><path d="M9 3v2c0 6-2 9-5 11"/><path d="M9 8c1 4 3 6 6 7"/><path d="M14 21l4-9 4 9"/><path d="M15.5 18h5"/></svg><span>English</span><span class="mck" id="cklangen"></span></button>
+  </div>
   <hr>
   <div class="mlabel" data-i18n="menu.manage">管理</div>
   <button data-act="pc" class="m-full"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg><span data-i18n="menu.switchpc">切换电脑</span></button>
@@ -3054,10 +3069,29 @@ function updateOrganizeChecks() {
   $("cktime").textContent = app.organize === "time" ? "✓" : "";
 }
 
-// —— 外观：auto 跟随系统 / light / dark 手动锁定（头部有防闪烁的提前应用）——
+function setMenuOption(act, selected, checkId) {
+  const btn = document.querySelector(`#topmenu button[data-act="${act}"]`);
+  if (btn) {
+    btn.classList.toggle("sel", selected);
+    btn.setAttribute("aria-pressed", selected ? "true" : "false");
+  }
+  const ck = checkId ? $(checkId) : null;
+  if (ck) ck.textContent = selected ? "✓" : "";
+}
+
+// —— 外观：未手动选择时跟随系统，菜单只展示 light / dark 两档（头部有防闪烁的提前应用）——
 function getTheme() {
   const t = localStorage.getItem("czr-theme");
   return t === "light" || t === "dark" ? t : "auto";
+}
+
+function getSystemTheme() {
+  return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+
+function getEffectiveTheme() {
+  const t = getTheme();
+  return t === "auto" ? getSystemTheme() : t;
 }
 
 function applyTheme(mode) {
@@ -3075,10 +3109,9 @@ function applyTheme(mode) {
 }
 
 function updateThemeChecks() {
-  const t = getTheme();
-  $("ckthauto").textContent = t === "auto" ? "✓" : "";
-  $("ckthlight").textContent = t === "light" ? "✓" : "";
-  $("ckthdark").textContent = t === "dark" ? "✓" : "";
+  const t = getEffectiveTheme();
+  setMenuOption("th-light", t === "light", "ckthlight");
+  setMenuOption("th-dark", t === "dark", "ckthdark");
 }
 
 // —— 字体两档：normal 常规（默认，不落存储）/ large 大号（头部有防闪烁的提前应用）——
@@ -3098,11 +3131,11 @@ function applyFontSize(mode) {
 
 function updateFontChecks() {
   const f = getFontSize();
-  $("ckfsnormal").textContent = f === "normal" ? "✓" : "";
-  $("ckfslarge").textContent = f === "large" ? "✓" : "";
+  setMenuOption("fs-normal", f === "normal", "ckfsnormal");
+  setMenuOption("fs-large", f === "large", "ckfslarge");
 }
 
-// —— 语言：auto 跟随浏览器（不落存储）/ zh / en 手动锁定。切换后整页重载，
+// —— 语言：未手动选择时跟随浏览器，菜单只展示 zh / en 两档。切换后整页重载，
 // 让已渲染的 DOM 与流式内容干净重建（观众凭据在 sessionStorage，深链/重连都能恢复）。——
 function getLangPref() {
   const l = localStorage.getItem("czr-lang");
@@ -3118,10 +3151,8 @@ function applyLang(mode) {
 }
 
 function updateLangChecks() {
-  const l = getLangPref();
-  $("cklangauto").textContent = l === "auto" ? "✓" : "";
-  $("cklangzh").textContent = l === "zh" ? "✓" : "";
-  $("cklangen").textContent = l === "en" ? "✓" : "";
+  setMenuOption("lang-zh", LANG === "zh", "cklangzh");
+  setMenuOption("lang-en", LANG === "en", "cklangen");
 }
 
 // 归一路径分隔符为 /、去尾分隔符，让同一套规则同时匹配 Windows(\) 与 POSIX(/)。
@@ -3389,6 +3420,17 @@ function ingestSessions(arr) {
     if (ex) Object.assign(ex, s);
     else app.knownById.set(s.id, { ...s });
     app.sessionNames.set(s.id, s.name || s.preview?.slice(0, 24) || t("session.fallback"));
+  }
+  app.lastSessions = [...app.knownById.values()];
+}
+
+function removeSessionFromLists(id) {
+  if (!id) return;
+  app.knownById.delete(id);
+  app.headSessions = app.headSessions.filter((s) => s.id !== id);
+  app.timeline.sessions = app.timeline.sessions.filter((s) => s.id !== id);
+  for (const c of app.projSessions.values()) {
+    c.sessions = c.sessions.filter((s) => s.id !== id);
   }
   app.lastSessions = [...app.knownById.values()];
 }
@@ -4181,6 +4223,9 @@ async function sendMessage() {
 }
 
 async function dispatch(text, atts) {
+  const originId = app.currentId;
+  const originDraft = isDraftSession() ? { ...app.draft } : null;
+  const stillOnOrigin = () => app.view === "session" && app.currentId === originId;
   const echo = addEcho(text, atts);
   setRunning(true);
   try {
@@ -4192,26 +4237,26 @@ async function dispatch(text, atts) {
     setEchoNote(echo, "");
     // 首条消息含 resume + 模型初始化，可能较慢
     const options = turnOptions(); // 按轮权限/模型 override（默认不传，沿用电脑配置）
-    if (isDraftSession()) {
-      const draft = app.draft;
-      const draftId = app.currentId;
-      const res = await startDraftSession(draft, text, images, options);
-      if (app.view !== "session" || app.currentId !== draftId) return; // 用户已返回首页：不重新打开草稿
-      await promoteDraftToSession(res.threadId, draft.cwd);
+    if (originDraft) {
+      const res = await startDraftSession(originDraft, text, images, options);
+      if (!stillOnOrigin()) return; // 用户已切到别的会话/草稿：不把旧请求结果应用到当前页
+      await promoteDraftToSession(res.threadId, originDraft.cwd);
       return;
     }
     await app.session.request("session.send", {
-      sessionId: app.currentId, text,
+      sessionId: originId, text,
       images: images.length ? images : undefined,
       options,
     }, 90000);
+    if (!stillOnOrigin()) return;
     if (app.pendingWatch) {
       // 空会话首条消息已发出 → rollout 文件已生成，现在接入流式与历史
       app.pendingWatch = false;
-      try { await app.session.request("session.watch", { sessionId: app.currentId, wt: newWatchToken() }); }
+      try { await app.session.request("session.watch", { sessionId: originId, wt: newWatchToken() }); }
       catch (e) { if (e.code !== 409) showBanner(t("banner.attach_fail", e.message)); } // 409=已被新 watch 接管
     }
   } catch (err) {
+    if (!stillOnOrigin()) return;
     setRunning(false);
     dropEcho(echo);
     const input = $("input");
@@ -6039,6 +6084,15 @@ function handleNotify(msg) {
     // 看板已带上该会话的 {running, approvals}：就地打补丁——更新该会话，并按精确增量
     // 调整其所属项目的徽标（runningCount/approvals 是整数，故可 O(1) 增量），不重拉任何列表。
     const bp = msg.params || {};
+    if (bp.archived === true) {
+      removeSessionFromLists(bp.sessionId);
+      scheduleListRefresh(); // 项目计数/最新会话等聚合信息后台对齐
+      if (app.view === "list") renderList();
+      return;
+    }
+    if (bp.archived === false) {
+      scheduleListRefresh(); // 取消归档后让未归档列表重新出现该会话
+    }
     const known = app.knownById.get(bp.sessionId);
     if (known) {
       const dA = (bp.approvals || 0) - (known.approvals || 0);
@@ -6680,7 +6734,7 @@ async function main() {
     showToast((await copyText(bubble.textContent)) ? t("toast.promptcopied") : t("toast.copyfail"));
   });
   $("newchat").onclick = newSession;
-  // ⋯ 菜单：组织方式切换 + 外观 + 管理入口
+  // ⋯ 菜单：组织方式切换 + 外观/字体/语言 + 管理入口
   applyTheme(getTheme()); // 补齐 meta theme-color（变量层已在头部脚本提前生效）
   $("menubtn").onclick = (e) => {
     e.stopPropagation();
@@ -6699,11 +6753,13 @@ async function main() {
       app.organize = act;
       localStorage.setItem("czr-organize", act);
       renderList();
-    } else if (act === "th-auto" || act === "th-light" || act === "th-dark") {
+    } else if (act === "th-light" || act === "th-dark") {
       applyTheme(act.slice(3));
+      updateThemeChecks();
     } else if (act === "fs-normal" || act === "fs-large") {
       applyFontSize(act.slice(3));
-    } else if (act === "lang-auto" || act === "lang-zh" || act === "lang-en") {
+      updateFontChecks();
+    } else if (act === "lang-zh" || act === "lang-en") {
       applyLang(act.slice(5));
     } else if (act === "pc") {
       openSheet();
