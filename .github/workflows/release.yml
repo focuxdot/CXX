@@ -1,0 +1,99 @@
+name: Release CXX
+
+on:
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: Create the GitHub release as a draft
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Syntax check
+        run: |
+          find daemon relay scripts -name '*.mjs' -print | sort | xargs -n1 node --check
+
+  build-macos:
+    needs: verify
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build macOS app and DMG
+        run: npm run build:app -- --dmg
+      - name: Prepare release assets
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          mkdir -p release-assets
+          cp "dist/CXX-${VERSION}.dmg" release-assets/CXX-macos.dmg
+          cp "dist/CXX-${VERSION}.dmg" "release-assets/CXX-${VERSION}-macos.dmg"
+          cp packaging/install.sh release-assets/install.sh
+          (cd release-assets && rm -f checksums.txt && for f in *; do [ "$f" = "checksums.txt" ] && continue; shasum -a 256 "$f"; done > checksums.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: release-assets/*
+          if-no-files-found: error
+
+  publish:
+    needs: build-macos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: release-assets
+      - name: Resolve release metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="v${VERSION}"
+          fi
+          DRAFT="${{ inputs.draft || 'false' }}"
+          if [[ "${GITHUB_REF}" != refs/tags/v* && "${DRAFT}" != "true" ]]; then
+            echo "Ready releases must be created from a v*.*.* tag push. Use draft=true for manual dry runs." >&2
+            exit 1
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "draft=${DRAFT}" >> "$GITHUB_OUTPUT"
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          DRAFT: ${{ steps.meta.outputs.draft }}
+        run: |
+          set -euo pipefail
+          draft_flag=()
+          if [ "${DRAFT}" = "true" ]; then
+            draft_flag=(--draft)
+          fi
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" release-assets/* --clobber
+          else
+            gh release create "${TAG}" release-assets/* "${draft_flag[@]}" --title "CXX ${TAG}" --notes "CXX release ${TAG}."
+          fi

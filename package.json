@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Remote-control your official Codex CLI from your phone. Install alongside an existing Codex install — no patched Codex required.",
+  "description": "Remote-control your local Codex / Claude Code from your phone. Install alongside existing CLIs — no patched agent required.",
   "license": "MIT",
   "engines": {
     "node": ">=22"

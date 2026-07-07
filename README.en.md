@@ -4,7 +4,7 @@
 
 # CXX
 
-### CXX is a remote takeover tool that securely connects your local Codex / Claude Code to your phone.
+### CXX is an enhancement tool that adds phone and WeChat remote takeover to your local Codex / Claude Code.
 
 <p><strong>View sessions, approve commands, start new turns, and take over <img src="public/icons/codex.svg" width="18" height="18" align="absmiddle" alt="Codex" /> Codex and <img src="public/icons/claude.svg" width="18" height="18" align="absmiddle" alt="Claude Code" /> Claude Code from any phone browser.</strong></p>
 
@@ -73,12 +73,23 @@ Some mobile / in-app browser engines lack WebCrypto's X25519. CXX ships a **pure
 
 ## 🏁 Quick start
 
+### One-command install (macOS)
+
+```bash
+curl -fsSL https://github.com/focuxdot/CXX/releases/latest/download/install.sh | bash
+```
+
+The installer downloads the latest macOS package from GitHub Releases, verifies it against `checksums.txt`, installs `CXX.app` into `/Applications`, and opens it. Manual downloads:
+
+- [install.sh](https://github.com/focuxdot/CXX/releases/latest/download/install.sh)
+- [CXX-macos.dmg](https://github.com/focuxdot/CXX/releases/latest/download/CXX-macos.dmg)
+
 ### For users: the macOS menu-bar app
 
 > [!NOTE]
 > Windows / Linux support is architected and will follow. The phone side is a web page — iOS, Android, and any in-app browser all work.
 
-1. **Launch the menu-bar app** (see [Building the macOS app](#-building-the-macos-app) below, or wait for a release). Remote is off on first run; the UI shows Chinese or English following your system language.
+1. **Launch the menu-bar app**. Remote is off on first run; the UI shows Chinese or English following your system language.
 2. Click the menu-bar icon → **Pair a device…**: the first click implicitly turns remote on (installs a resident LaunchAgent and starts the daemon; Codex is enabled by default, and Claude Code is added to the switcher when detected) → **shows the pairing QR**.
 3. **Scan to pair** (any browser or QR scanner) — credentials are stored encrypted on the phone, so later visits skip the scan.
 4. **Go remote**: view and take over the computer's Codex or Claude Code sessions from your phone.

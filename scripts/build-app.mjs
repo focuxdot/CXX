@@ -11,7 +11,7 @@
 // CODESIGN_IDENTITY="Developer ID Application: …" for a distributable, notarizable build.
 // Pass --dmg to also produce a DMG.
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, rmSync, writeFileSync, existsSync, chmodSync } from "node:fs";
+import { copyFileSync, mkdirSync, rmSync, writeFileSync, existsSync, chmodSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,10 +25,12 @@ const daemonBin = join(distDir, "sea", "cxx-daemon");
 const shellSrc = join(root, "shell", "macos", "Sources", "CXXMenuBar");
 const shellBin = join(macosDir, "cxx-menubar");
 
-const VERSION = "0.1.0";
+const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const VERSION = process.env.CXX_VERSION || pkg.version;
 const BUNDLE_ID = "ai.wokey.cxx";
 const identity = process.env.CODESIGN_IDENTITY || "-";
 const makeDmg = process.argv.includes("--dmg");
+const targetArch = process.env.CXX_TARGET_ARCH || process.arch;
 
 function run(cmd, args, opts = {}) {
   console.log(`$ ${cmd} ${args.join(" ")}`);
@@ -71,7 +73,7 @@ run("swiftc", [
   "-framework",
   "ServiceManagement",
   "-target",
-  "arm64-apple-macosx13.0",
+  `${targetArch}-apple-macosx13.0`,
 ]);
 chmodSync(shellBin, 0o755);
 
