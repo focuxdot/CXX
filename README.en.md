@@ -73,26 +73,15 @@ Some mobile / in-app browser engines lack WebCrypto's X25519. CXX ships a **pure
 
 ## 🏁 Quick start
 
-### One-command install (macOS)
+### One-command install
 
-```bash
-curl -fsSL https://github.com/focuxdot/CXX/releases/latest/download/install.sh | bash
-```
+**macOS**: `curl -fsSL https://github.com/focuxdot/CXX/releases/latest/download/install.sh | bash`
 
-The installer downloads the latest macOS package from GitHub Releases, verifies it against `checksums.txt`, installs `CXX.app` into `/Applications`, and opens it. Manual downloads:
+**Windows PowerShell**: `irm https://github.com/focuxdot/CXX/releases/latest/download/install.ps1 | iex`
 
-- [install.sh](https://github.com/focuxdot/CXX/releases/latest/download/install.sh)
-- [CXX-macos.dmg](https://github.com/focuxdot/CXX/releases/latest/download/CXX-macos.dmg)
+The installer downloads the latest GitHub Release package and opens CXX; Windows verifies `checksums.txt` first.
 
-### One-command install (Windows PowerShell)
-
-```powershell
-irm https://github.com/focuxdot/CXX/releases/latest/download/install.ps1 | iex
-```
-
-The installer downloads the latest Windows package from GitHub Releases, verifies it against `checksums.txt`, installs it silently, and opens the pairing window. Manual download:
-
-- [CXX-win-x64.exe](https://github.com/focuxdot/CXX/releases/latest/download/CXX-win-x64.exe)
+Package downloads: [CXX-macos.dmg](https://github.com/focuxdot/CXX/releases/latest/download/CXX-macos.dmg) · [CXX-win-x64.exe](https://github.com/focuxdot/CXX/releases/latest/download/CXX-win-x64.exe)
 
 After installation, open **CXX** from the desktop or Start menu. It opens the pairing window directly. The background daemon lives under the install directory's `resources` folder; the user-facing entry point is `CXX.exe`.
 
