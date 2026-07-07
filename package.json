@@ -1,0 +1,22 @@
+{
+  "name": "cxx",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Remote-control your official Codex CLI from your phone. Install alongside an existing Codex install — no patched Codex required.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "daemon": "node daemon/src/main.mjs start",
+    "pair": "node daemon/src/main.mjs pair",
+    "notify": "node daemon/src/main.mjs notify",
+    "relay": "node relay/node/server.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "check:schema": "node scripts/check-schema.mjs",
+    "check:schema:update": "node scripts/check-schema.mjs --update",
+    "build:sea": "node scripts/build-sea.mjs",
+    "build:app": "node scripts/build-app.mjs"
+  }
+}

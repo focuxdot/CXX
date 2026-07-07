@@ -1,0 +1,22 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# internal planning / requirement docs — never publish (kept on disk, out of the repo)
+internal/
+docs/
+
+# maintainer-only git account-safety tooling — machine-local, references a personal
+# SSH identity; kept on disk so it stays active locally but never published
+.githooks/
+scripts/git-push-maintainer.mjs
+
+# local daemon state (should never be committed)
+.cxx/
+daemon.json
+# build artifacts
+*.blob
+shell/macos/build/
+shell/macos/DerivedData/
+shell/macos/.build/

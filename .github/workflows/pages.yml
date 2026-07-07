@@ -1,0 +1,54 @@
+name: Deploy web client (GitHub Pages)
+
+# Publishes the phone web client (web/) to GitHub Pages, served at the project page
+# https://<owner>.github.io/CXX/. The daemon's default webUrl points here, so pairing
+# links / QR codes open this deployment. No custom domain / DNS required.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "web/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy GitHub Pages
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Assemble site (project page /CXX/)
+        run: |
+          mkdir -p site/icons
+          cp web/index.html web/manifest.webmanifest web/sw.js site/
+          cp web/icons/*.png site/icons/
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

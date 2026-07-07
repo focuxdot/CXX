@@ -1,0 +1,70 @@
+# Compatibility CI — the project's lifeline against `codex app-server` (experimental) drift.
+#
+# Two jobs:
+#   compat-pinned : runs on every push / PR against the minimum-verified codex. Gates merges.
+#   compat-latest : scheduled daily + manual, installs codex@latest to catch a breaking upstream
+#                   release early. A red run here is the alarm to review protocol drift.
+#
+# Each job runs, in order: syntax check → schema-drift (offline, deterministic) → E2E smoke.
+#
+# Auth note: `generate-json-schema` and the smoke handshake/list/reject path are credential-free.
+# The message→approval turn (a real model call) needs a logged-in codex; to exercise it in CI,
+# add a `CODEX_API_KEY` secret and a `codex login --api-key` step before the smoke run.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * *" # daily ~06:17 UTC (off the :00 mark to avoid fleet-wide bunching)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compat-pinned:
+    name: compat (codex ${{ matrix.codex }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        codex: ["0.142.5"] # minimum-verified floor; bump alongside MIN_CODEX_VERSION
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install official codex
+        run: npm install -g @openai/codex@${{ matrix.codex }}
+      - run: codex --version
+      - name: Syntax check
+        run: |
+          node --check daemon/src/main.mjs
+          node --check daemon/src/codex-version.mjs
+          node --check scripts/check-schema.mjs
+          node --check scripts/smoke.mjs
+      - name: Schema drift (offline, deterministic)
+        run: npm run check:schema
+      - name: End-to-end smoke (relay + daemon + real codex app-server)
+        run: npm run smoke
+
+  compat-latest:
+    name: compat (codex@latest)
+    # Only on schedule / manual dispatch: a breaking upstream release should not red-x PRs,
+    # but must fire the daily alarm.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install latest official codex
+        run: npm install -g @openai/codex@latest
+      - run: codex --version
+      - name: Schema drift vs committed baseline
+        run: npm run check:schema
+      - name: End-to-end smoke
+        run: npm run smoke

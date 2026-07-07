@@ -1,0 +1,18 @@
+name = "cxx-relay"
+main = "src/worker.mjs"
+compatibility_date = "2026-06-01"
+
+# Where your relay is reachable. Pick one:
+#   1. Easiest — leave `routes` unset and `wrangler deploy` puts it on the free
+#      *.workers.dev subdomain Cloudflare gives you. Point the daemon at it with
+#      `--relay wss://cxx-relay.<your-subdomain>.workers.dev`.
+#   2. Custom domain — bind your own hostname (dashboard, or uncomment below).
+# routes = [{ pattern = "relay.example.com/*", zone_name = "example.com" }]
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "RelayRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RelayRoom"]
