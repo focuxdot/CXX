@@ -84,9 +84,13 @@ curl -fsSL https://github.com/focuxdot/CXX/releases/latest/download/install.sh |
 - [install.sh](https://github.com/focuxdot/CXX/releases/latest/download/install.sh)
 - [CXX-macos.dmg](https://github.com/focuxdot/CXX/releases/latest/download/CXX-macos.dmg)
 
-### Windows 安装包
+### Windows 一条命令安装（PowerShell）
 
-下载并双击安装：
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/focuxdot/CXX/releases/latest/download/install.ps1 | iex"
+```
+
+安装脚本会下载最新 GitHub Release 里的 Windows 安装包，校验 `checksums.txt` 后静默安装并打开配对窗口。也可以手动下载：
 
 - [CXX-win-x64.exe](https://github.com/focuxdot/CXX/releases/latest/download/CXX-win-x64.exe)
 

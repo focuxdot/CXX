@@ -84,9 +84,13 @@ The installer downloads the latest macOS package from GitHub Releases, verifies 
 - [install.sh](https://github.com/focuxdot/CXX/releases/latest/download/install.sh)
 - [CXX-macos.dmg](https://github.com/focuxdot/CXX/releases/latest/download/CXX-macos.dmg)
 
-### Windows installer
+### One-command install (Windows PowerShell)
 
-Download and run:
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/focuxdot/CXX/releases/latest/download/install.ps1 | iex"
+```
+
+The installer downloads the latest Windows package from GitHub Releases, verifies it against `checksums.txt`, installs it silently, and opens the pairing window. Manual download:
 
 - [CXX-win-x64.exe](https://github.com/focuxdot/CXX/releases/latest/download/CXX-win-x64.exe)
 
