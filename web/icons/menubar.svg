@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="54 132 372 246" role="img" aria-labelledby="title desc">
+  <title id="title">C叉叉 menu bar logo</title>
+  <desc id="desc">透明背景，绿色 C叉叉 和下划线。</desc>
+  <path d="M215 174c-21-21-57-28-90-13-43 20-62 71-42 114 20 43 71 62 114 42 12-6 23-14 32-24" transform="translate(-4 0)" fill="none" stroke="#07C160" stroke-width="42" stroke-linecap="round"/>
+  <text x="319" y="266" text-anchor="middle" dominant-baseline="middle" font-family="PingFang SC, Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="108" font-weight="900" fill="#07C160">叉叉</text>
+  <path d="M323 349H394" stroke="#07C160" stroke-width="21" stroke-linecap="round"/>
+</svg>

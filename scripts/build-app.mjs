@@ -6,6 +6,8 @@
 //     Info.plist                 (LSUIElement — menu-bar only, no dock icon)
 //     MacOS/cxx-menubar          (Swift shell, compiled with swiftc)
 //     Resources/cxx-daemon       (Node SEA daemon, spawned by the shell)
+//     Resources/AppIcon.icns     (Finder/DMG app icon)
+//     Resources/menubar.png      (green transparent menu-bar glyph)
 //
 // Signing: nested daemon signed first, then the app (deep). Ad-hoc by default; set
 // CODESIGN_IDENTITY="Developer ID Application: …" for a distributable, notarizable build.
@@ -24,6 +26,10 @@ const resourcesDir = join(contents, "Resources");
 const daemonBin = join(distDir, "sea", "cxx-daemon");
 const shellSrc = join(root, "shell", "macos", "Sources", "CXXMenuBar");
 const shellBin = join(macosDir, "cxx-menubar");
+const iconDir = join(root, "web", "icons");
+const appIcon = join(iconDir, "AppIcon.icns");
+const menuBarIcon = join(iconDir, "menubar.png");
+const logoSvg = join(iconDir, "logo.svg");
 
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const VERSION = process.env.CXX_VERSION || pkg.version;
@@ -80,6 +86,15 @@ chmodSync(shellBin, 0o755);
 // 4. embed the daemon
 copyFileSync(daemonBin, join(resourcesDir, "cxx-daemon"));
 chmodSync(join(resourcesDir, "cxx-daemon"), 0o755);
+for (const file of [appIcon, menuBarIcon, logoSvg]) {
+  if (!existsSync(file)) {
+    console.error(`Missing icon asset: ${file}. Run \`node web/gen-icons.mjs\` first.`);
+    process.exit(1);
+  }
+}
+copyFileSync(appIcon, join(resourcesDir, "AppIcon.icns"));
+copyFileSync(menuBarIcon, join(resourcesDir, "menubar.png"));
+copyFileSync(logoSvg, join(resourcesDir, "logo.svg"));
 
 // 5. Info.plist
 const plist = `<?xml version="1.0" encoding="UTF-8"?>
@@ -90,6 +105,7 @@ const plist = `<?xml version="1.0" encoding="UTF-8"?>
   <key>CFBundleDisplayName</key><string>C叉叉</string>
   <key>CFBundleIdentifier</key><string>${BUNDLE_ID}</string>
   <key>CFBundleExecutable</key><string>cxx-menubar</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleVersion</key><string>${VERSION}</string>
   <key>CFBundleShortVersionString</key><string>${VERSION}</string>
   <key>CFBundlePackageType</key><string>APPL</string>

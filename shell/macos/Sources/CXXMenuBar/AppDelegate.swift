@@ -51,10 +51,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func status() -> [String: Any] { backend(["status"]) }
 
+    private func bundledMenuBarIcon() -> NSImage? {
+        let fm = FileManager.default
+        let candidates: [URL?] = [
+            Bundle.main.url(forResource: "menubar", withExtension: "png"),
+            ProcessInfo.processInfo.environment["CXX_MENUBAR_ICON"].map { URL(fileURLWithPath: $0) },
+            URL(fileURLWithPath: fm.currentDirectoryPath).appendingPathComponent("web/icons/menubar.png"),
+        ]
+        for candidate in candidates {
+            guard let url = candidate, fm.isReadableFile(atPath: url.path),
+                  let image = NSImage(contentsOf: url) else { continue }
+            image.isTemplate = false
+            image.size = NSSize(width: 24, height: 16)
+            return image
+        }
+        return nil
+    }
+
     func refreshIcon(_ st: [String: Any]) {
         let enabled = st["enabled"] as? Bool ?? false
         let running = st["running"] as? Bool ?? false
         guard let button = statusItem.button else { return }
+        if let image = bundledMenuBarIcon() {
+            button.image = image
+            button.imagePosition = .imageOnly
+            button.imageScaling = .scaleProportionallyDown
+            button.title = ""
+            button.toolTip = !enabled
+                ? L("C叉叉远程未开启", "CXX Remote off")
+                : (running ? L("C叉叉远程运行中", "CXX Remote on")
+                           : L("C叉叉已启用但未运行", "CXX enabled, not running"))
+            button.appearsDisabled = false
+            return
+        }
         // Distinguish states by icon shape (not dimming — a dimmed glyph vanishes on a
         // dark menu bar). Template images auto-adapt to light/dark. Off = slashed
         // antenna, running = solid antenna, error = warning triangle.
