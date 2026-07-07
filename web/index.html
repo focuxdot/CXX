@@ -170,14 +170,13 @@ try {
   #topmenu .mck { margin-left: auto; color: var(--accent); }
   #topmenu .mseg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px;
                    margin: 2px 4px 8px; border: 1px solid var(--border); border-radius: 12px;
-                   background: var(--sunken); }
+                   background: none; }
   #topmenu .mseg button { justify-content: center; gap: 7px; min-width: 0; padding: 9px 8px;
                           border-radius: 8px; color: var(--dim); }
   #topmenu .mseg button span:not(.mck) { min-width: 0; white-space: nowrap; overflow: hidden;
                                          text-overflow: ellipsis; }
   #topmenu .mseg button .mck { margin-left: 0; min-width: 10px; font-weight: 700; }
-  #topmenu .mseg button.sel { background: var(--raised); color: var(--text);
-                              box-shadow: inset 0 0 0 1px var(--border), 0 1px 8px rgba(0,0,0,.16); }
+  #topmenu .mseg button.sel { background: none; color: var(--text); }
   #topmenu .mseg button.sel svg, #topmenu .mseg button.sel .mck { color: var(--accent); }
   #topmenu hr { border: none; border-top: 1px solid var(--border); margin: 6px 8px; }
 
@@ -1416,7 +1415,7 @@ function resolveLang() {
   } catch {}
   return (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
 }
-const LANG = resolveLang();
+let LANG = resolveLang();
 function t(key, ...args) {
   const v = (I18N[LANG] && I18N[LANG][key]) ?? I18N.zh[key] ?? key;
   if (typeof v === "function") return v(...args);
@@ -3135,8 +3134,7 @@ function updateFontChecks() {
   setMenuOption("fs-large", f === "large", "ckfslarge");
 }
 
-// —— 语言：未手动选择时跟随浏览器，菜单只展示 zh / en 两档。切换后整页重载，
-// 让已渲染的 DOM 与流式内容干净重建（观众凭据在 sessionStorage，深链/重连都能恢复）。——
+// —— 语言：未手动选择时跟随浏览器，菜单只展示 zh / en 两档。切换后即时更新静态 UI。——
 function getLangPref() {
   const l = localStorage.getItem("czr-lang");
   return l === "zh" || l === "en" ? l : "auto";
@@ -3144,10 +3142,14 @@ function getLangPref() {
 
 function applyLang(mode) {
   const target = mode === "zh" || mode === "en" ? mode : "auto";
-  if (target === getLangPref()) return; // 无变化：不落存储、不重载
+  if (target === getLangPref()) return; // 无变化：不落存储、不重绘
   if (target === "auto") localStorage.removeItem("czr-lang");
   else localStorage.setItem("czr-lang", target);
-  location.reload(); // 整页重建，让所有已渲染内容按新语言重出
+  LANG = resolveLang();
+  document.documentElement.lang = LANG === "zh" ? "zh-CN" : "en";
+  applyStaticI18n();
+  updateLangChecks();
+  if (app.view === "list") renderList();
 }
 
 function updateLangChecks() {
@@ -6748,10 +6750,10 @@ async function main() {
   $("topmenu").onclick = (e) => {
     const act = e.target.closest("button")?.dataset.act;
     if (!act) return;
-    $("topmenu").classList.remove("open");
     if (act === "proj" || act === "time") {
       app.organize = act;
       localStorage.setItem("czr-organize", act);
+      updateOrganizeChecks();
       renderList();
     } else if (act === "th-light" || act === "th-dark") {
       applyTheme(act.slice(3));
@@ -6762,8 +6764,10 @@ async function main() {
     } else if (act === "lang-zh" || act === "lang-en") {
       applyLang(act.slice(5));
     } else if (act === "pc") {
+      $("topmenu").classList.remove("open");
       openSheet();
     } else if (act === "diag") {
+      $("topmenu").classList.remove("open");
       openDiag();
     }
   };
