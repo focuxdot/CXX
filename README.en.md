@@ -75,9 +75,17 @@ Some mobile / in-app browser engines lack WebCrypto's X25519. CXX ships a **pure
 
 ### One-command install
 
-**macOS**: `curl -fsSL https://github.com/focuxdot/CXX/releases/latest/download/install.sh | bash`
+**macOS**
 
-**Windows PowerShell**: `irm https://github.com/focuxdot/CXX/releases/latest/download/install.ps1 | iex`
+```bash
+curl -fsSL https://github.com/focuxdot/CXX/releases/latest/download/install.sh | bash
+```
+
+**Windows PowerShell**
+
+```powershell
+irm https://github.com/focuxdot/CXX/releases/latest/download/install.ps1 | iex
+```
 
 The installer downloads the latest GitHub Release package and opens CXX; Windows verifies `checksums.txt` first.
 
