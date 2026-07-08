@@ -460,10 +460,16 @@ try {
   #log.cl-inline .tool { border: none; background: none; border-radius: 0; margin: 0; overflow: visible; }
   #log.cl-inline .tool-head { padding: 4px 0; }
   #log.cl-inline .tool-body { border: 1px solid var(--border); border-radius: 8px; margin: 2px 0 8px; }
-  /* Claude 计划清单：TodoWrite 就地渲染成勾选清单，钉在信息流末尾、就地更新 */
+  /* Claude 计划/任务清单：TodoWrite/TaskCreate 就地渲染成勾选清单，钉在信息流末尾、就地更新；
+     点标题折叠（对标终端 ctrl+t hide tasks——长清单在手机上会占满整屏） */
   .todos { border: 1px solid var(--border); background: var(--raised); border-radius: 10px;
            margin: 12px 0; padding: 9px 13px; }
-  .todos .thd { font-size: 11.5px; color: var(--dim); margin-bottom: 5px; letter-spacing: .4px; }
+  .todos .thd { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--dim);
+                margin-bottom: 5px; letter-spacing: .4px; cursor: pointer;
+                -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  .todos .thd .tchev { margin-left: auto; }
+  .todos.collapsed .titem { display: none; }
+  .todos.collapsed .thd { margin-bottom: 0; }
   .todos .titem { display: flex; gap: 8px; align-items: baseline; padding: 2px 0;
                   font-size: 14px; line-height: 1.5; }
   .todos .tmark { flex: none; width: 14px; text-align: center; color: var(--dim); }
@@ -570,6 +576,18 @@ try {
   #plusmenu .mic { flex: none; width: 18px; height: 18px; color: var(--dim); }
   #plusmenu .mic svg { width: 18px; height: 18px; display: block; }
   #plusmenu .mck { margin-left: auto; color: var(--accent); }
+  /* 输入建议（斜杠命令面板 / @ 文件补全共用）：内嵌在输入框上方的滚动列表 */
+  #suggest { display: none; max-height: 216px; overflow-y: auto; margin: 2px 2px 4px;
+             border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  #suggest.open { display: block; }
+  #suggest .srow { display: flex; align-items: baseline; gap: 10px; width: 100%; border: none;
+                   background: none; color: var(--text); font-size: 14px; padding: 9px 10px;
+                   border-radius: 8px; cursor: pointer; text-align: left; }
+  #suggest .srow.hi, #suggest .srow:active { background: var(--sunken); }
+  #suggest .sname { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
+                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #suggest .sdesc { margin-left: auto; flex: 0 1 auto; color: var(--dim); font-size: 12px;
+                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* 操作排走官方 App 的裸排版：加号/图标/文字不带按钮圈，只有发送/停止是实心圆 */
   .obtn { flex: none; max-width: 148px; overflow: hidden; text-overflow: ellipsis;
           white-space: nowrap; border: none; background: none; color: var(--dim);
@@ -865,6 +883,7 @@ try {
   </div>
   <div id="card">
     <div id="attachrow"></div>
+    <div id="suggest"></div>
     <textarea id="input" rows="1" data-i18n-ph="input.ph" placeholder="给 Codex 发消息…"></textarea>
     <div class="crow">
       <button id="attach" data-i18n-aria="a11y.sendimg" aria-label="发送图片">＋</button>
@@ -974,6 +993,9 @@ const I18N = {
     "plus.camera": "拍照",
     "plus.photos": "选照片",
     "plus.paste": "粘贴图片",
+    "slash.new.desc": "在当前项目新建会话",
+    "slash.compact.desc": "压缩对话上下文",
+    "slash.init.desc": "生成或更新 CLAUDE.md",
     "input.ph": "给 Codex 发消息…",
     "plan.pill": "计划 ✕",
     "status.reconnecting": "重连中…",
@@ -1043,7 +1065,7 @@ const I18N = {
     "act.bash": "执行命令", "act.read": "读取文件", "act.search": "搜索", "act.web": "检索网页",
     "act.edit": "编辑文件", "act.task": "运行子任务", "act.todo": "更新计划",
     "act.think": "思考中", "act.reply": "回复中", "act.work": "处理中",
-    "todo.title": "计划",
+    "todo.title": "计划", "task.title": "任务", "act.tasks": "更新任务",
     "turn.done": "已处理 {0}",
     "dur.sec": "{0} 秒",
     "dur.minsec": "{0} 分 {1} 秒",
@@ -1276,6 +1298,9 @@ const I18N = {
     "plus.camera": "Camera",
     "plus.photos": "Photos",
     "plus.paste": "Paste image",
+    "slash.new.desc": "New session in this project",
+    "slash.compact.desc": "Compact conversation context",
+    "slash.init.desc": "Create or update CLAUDE.md",
     "input.ph": "Message Codex…",
     "plan.pill": "Plan ✕",
     "status.reconnecting": "Reconnecting…",
@@ -1345,7 +1370,7 @@ const I18N = {
     "act.bash": "Running command", "act.read": "Reading", "act.search": "Searching", "act.web": "Browsing",
     "act.edit": "Editing", "act.task": "Running subtask", "act.todo": "Updating plan",
     "act.think": "Thinking", "act.reply": "Responding", "act.work": "Working",
-    "todo.title": "Plan",
+    "todo.title": "Plan", "task.title": "Tasks", "act.tasks": "Updating tasks",
     "turn.done": "Worked for {0}",
     "dur.sec": "{0}s",
     "dur.minsec": "{0}m {1}s",
@@ -2536,18 +2561,25 @@ function appendDiffFiles(container, files) {
 }
 
 // 文件改动卡：标题 + 每个文件的着色 diff
-function diffNode({ files, ok }) {
+function diffNode({ files, ok, callId }) {
   const wrap = toolRow({
     icon: "✎",
     label: files.length === 1 ? t("diff.one", files[0].path.split(/[\\/]/).pop()) : t("diff.many", files.length),
-    detail: "", callId: null,
+    detail: "", callId: callId ?? null,
   });
   const stat = wrap.querySelector(".tstat");
-  stat.textContent = ok ? "✓" : "✗";
-  stat.classList.add(ok ? "ok" : "err");
+  // Codex（patch_apply_end）创建即知成败；Claude 传 ok:null + callId，成败由 tool_result
+  // 回执经 attachToolOutput 并入（同一配对通道），故保留 tout 只撤掉调用参数文本行
+  if (ok !== null && ok !== undefined) {
+    stat.textContent = ok ? "✓" : "✗";
+    stat.classList.add(ok ? "ok" : "err");
+  }
   const body = wrap.querySelector(".tool-body");
-  body.innerHTML = "";
-  appendDiffFiles(body, files);
+  const tout = wrap.querySelector(".tout");
+  body.firstChild.remove(); // tin：diff 卡不需要"详情=标签"的占位文本
+  const dwrap = document.createElement("div");
+  appendDiffFiles(dwrap, files);
+  body.insertBefore(dwrap, tout);
   return wrap;
 }
 
@@ -2809,9 +2841,15 @@ const app = {
   turnStartTs: 0,      // 本轮真实起点=最近一条非 tool_result 用户消息时间戳（耗时锚，跨空闲不漂）
   turnSummarized: false, // 本轮是否已钉"已处理 Xs"总结行（rising edge 重置）
   claudeIdle: null,    // 桌面驱动 Claude 会话的运行态空闲兜底定时器
-  todoNode: null,      // 流末尾计划清单 DOM（TodoWrite 就地更新）
-  todoCalls: new Set(), // TodoWrite 的 tool_use id 集合（吞掉其 tool_result 回执噪音）
+  todoNode: null,      // 流末尾计划清单 DOM（TodoWrite/Task* 就地更新）
+  todoCalls: new Set(), // TodoWrite/TaskCreate/TaskUpdate 的 tool_use id 集合（吞掉工具卡与回执噪音）
   pendingTodos: null,  // 待渲染的最新 todos（trackClaudeActivity 抽出，renderInto 末尾落地）
+  tasks: new Map(),    // 新版任务模式：taskId -> {content,activeForm,status}（TaskCreate/TaskUpdate 增量维护）
+  taskCreates: new Map(), // TaskCreate 在途：tool_use id -> input（任务 id 在 tool_result 里才揭晓）
+  taskPeeks: new Map(), // TaskGet/TaskList 在途：tool_use id -> "get"|"list"（回执带结构化任务，补全被
+                        // 历史窗口截掉的 TaskCreate——首屏只回填最近 histLimit 条，创建可能在窗口外）
+  taskMode: false,     // 本会话见过任务模式工具 → 清单标题显示"任务"而非"计划"
+  todoCollapsed: false, // 清单折叠态（点标题切换；对标终端 ctrl+t hide tasks，进会话时复位）
   titleTimer: null,    // refreshTitle 防抖
   sessionNames: new Map(), // id -> 展示名（审批卡片用）
   lastSessions: [],        // knownById 的数组视图（散落消费点的兜底数据源）
@@ -4281,7 +4319,8 @@ async function openSession(id, title, opts = {}) {
   app.pendingWatch = !!(opts.fresh || opts.draft);
   app.running = false;
   app.echoes = [];
-  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; clearTimeout(app.claudeIdle); app.claudeIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
+  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.claudeIdle); app.claudeIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
+  app.todoCollapsed = false; // 折叠态是会话级选择：进会话复位；快照重放（加载更早/重连）不动它
   app.seenImages.clear();
   app.sawFunctionCalls = false;
   app.permState = null;
@@ -4390,7 +4429,7 @@ async function closeSession() {
   app.pendingWatch = false;
   app.echoes = [];
   app.suppressUserImages = 0;
-  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; clearTimeout(app.claudeIdle); app.claudeIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
+  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.claudeIdle); app.claudeIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
   app.stream = null;
   app.proc = null;
   app.permState = null;
@@ -4611,6 +4650,158 @@ async function startDraftSession(draft, text, images, options) {
   }
 }
 
+// —— 输入建议：斜杠命令面板 + @ 文件补全（共用 #suggest 下拉）——
+// 斜杠：输入以 "/" 开头时列命令；内置项两端通用（/new），透传项仅 Claude（/compact 及
+// .claude/commands 自定义命令——claude -p 的 stream-json 输入原样接收斜杠文本并执行）。
+// @：光标前有 "@词" 时经 daemon files.search 在会话 cwd 内模糊补全，两端通用。
+const sug = { mode: null, items: [], hi: 0, seq: 0, timer: 0 };
+const slashCmdCache = new Map(); // cwd -> commands.list 结果（会话页存活期内缓存）
+let filesSearchOk = true;        // 旧 daemon 无 files.search：见到"未知方法"后本页不再发
+
+function currentSessionCwd() {
+  if (isDraftSession()) return app.draft?.cwd || "";
+  return app.knownById.get(app.currentId)?.cwd || "";
+}
+
+function builtinSlashCmds() {
+  const cmds = [{ name: "new", action: "new", description: t("slash.new.desc") }];
+  if (app.agent === "claude") {
+    cmds.push(
+      { name: "compact", description: t("slash.compact.desc") },
+      { name: "init", description: t("slash.init.desc") },
+    );
+  }
+  return cmds;
+}
+
+function updateSuggest() {
+  const ta = $("input");
+  if (app.isViewer || app.view !== "session") return hideSuggest();
+  const pos = ta.selectionStart ?? ta.value.length;
+  const before = ta.value.slice(0, pos);
+  const slash = /^\/([\w:-]*)$/.exec(before);
+  if (slash && !ta.value.slice(pos).trim()) return showSlash(slash[1]);
+  const at = /(^|[\s(（"'`])@([\w./一-鿿-]*)$/.exec(before);
+  if (at && currentSessionCwd()) return showAt(at[2]);
+  hideSuggest();
+}
+
+function showSlash(query) {
+  const q = query.toLowerCase();
+  const items = builtinSlashCmds();
+  if (app.agent === "claude") {
+    const cwd = currentSessionCwd();
+    const key = cwd || "~";
+    if (!slashCmdCache.has(key)) {
+      slashCmdCache.set(key, []); // 先占位：拉取中再敲键不重复请求
+      app.session?.request("commands.list", cwd ? { cwd } : {}, 10000)
+        .then((r) => {
+          slashCmdCache.set(key, Array.isArray(r?.commands) ? r.commands : []);
+          if (sug.mode === "slash") updateSuggest(); // 到货刷新已打开的面板
+        })
+        .catch(() => {}); // 旧 daemon：只有内置命令
+    }
+    const seen = new Set(items.map((c) => c.name));
+    for (const c of slashCmdCache.get(key) || []) {
+      if (c?.name && !seen.has(c.name)) { items.push(c); seen.add(c.name); }
+    }
+  }
+  renderSuggest("slash", items.filter((c) => c.name.toLowerCase().startsWith(q)).slice(0, 8));
+}
+
+function showAt(query) {
+  clearTimeout(sug.timer);
+  sug.timer = setTimeout(async () => {
+    const cwd = currentSessionCwd();
+    if (!cwd || !filesSearchOk || !app.session) return hideSuggest();
+    const seq = ++sug.seq;
+    try {
+      const r = await app.session.request("files.search", { cwd, query, limit: 8 }, 10000);
+      if (seq !== sug.seq) return; // 已被更新的输入/关闭作废
+      renderSuggest("at", (r?.files ?? []).map((f) => ({ name: f.path, dir: !!f.dir })));
+    } catch (err) {
+      if (/未知方法/.test(err.message)) filesSearchOk = false;
+      if (seq === sug.seq) hideSuggest();
+    }
+  }, 160); // 防抖：连续按键只发最后一发
+}
+
+function renderSuggest(mode, items) {
+  if (!items.length) return hideSuggest();
+  sug.mode = mode;
+  sug.items = items;
+  sug.hi = 0;
+  const box = $("suggest");
+  box.innerHTML = "";
+  items.forEach((it, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `srow${i === 0 ? " hi" : ""}`;
+    const name = document.createElement("span");
+    name.className = "sname";
+    name.textContent = mode === "slash" ? `/${it.name}` : it.name;
+    b.appendChild(name);
+    const desc = mode === "slash" ? [it.description, it.hint].filter(Boolean).join(" ") : "";
+    if (desc) {
+      const d = document.createElement("span");
+      d.className = "sdesc";
+      d.textContent = desc;
+      b.appendChild(d);
+    }
+    // pointerdown + preventDefault：选中不让输入框失焦（blur 会关面板）
+    b.addEventListener("pointerdown", (e) => { e.preventDefault(); applySuggest(i); });
+    box.appendChild(b);
+  });
+  box.classList.add("open");
+}
+
+function moveSuggest(dir) {
+  if (!sug.items.length) return;
+  sug.hi = (sug.hi + dir + sug.items.length) % sug.items.length;
+  const rows = $("suggest").children;
+  for (let i = 0; i < rows.length; i++) rows[i].classList.toggle("hi", i === sug.hi);
+  rows[sug.hi]?.scrollIntoView({ block: "nearest" });
+}
+
+function applySuggest(i) {
+  const it = sug.items[i];
+  const mode = sug.mode;
+  if (!it) return hideSuggest();
+  const ta = $("input");
+  const pos = ta.selectionStart ?? ta.value.length;
+  const before = ta.value.slice(0, pos);
+  const after = ta.value.slice(pos);
+  if (mode === "slash") {
+    hideSuggest();
+    if (it.action === "new") { // UI 命令：等价首页"新建会话"，其余斜杠文本原样发给 CLI
+      ta.value = "";
+      autoGrow();
+      updateSendState();
+      openDraftSession(currentSessionCwd());
+      return;
+    }
+    ta.value = `${before.replace(/^\/[\w:-]*$/, `/${it.name} `)}${after}`;
+  } else {
+    // 目录：只补路径不收面板，继续下钻；文件：补上尾随空格结束本次补全
+    ta.value = `${before.replace(/@[\w./一-鿿-]*$/, `@${it.name}${it.dir ? "" : " "}`)}${after}`;
+  }
+  const np = ta.value.length - after.length;
+  ta.focus();
+  ta.setSelectionRange(np, np);
+  autoGrow();
+  updateSendState();
+  if (mode === "at" && it.dir) updateSuggest();
+  else hideSuggest();
+}
+
+function hideSuggest() {
+  sug.mode = null;
+  sug.items = [];
+  sug.seq++;
+  clearTimeout(sug.timer);
+  $("suggest").classList.remove("open");
+}
+
 async function sendMessage() {
   const input = $("input");
   const text = input.value.trim();
@@ -4625,6 +4816,7 @@ async function sendMessage() {
   renderAttachments();
   autoGrow();
   updateSendState();
+  hideSuggest();
   // daemon 驱动运行中：进本地队列，本轮结束后自动发出（点气泡可撤回）
   if (app.running && app.driver === "daemon") {
     enqueue(text, atts);
@@ -5735,6 +5927,63 @@ function claudeToolResultText(content) {
   return String(content ?? "").trim();
 }
 
+// 行级 LCS diff：old/new 片段（Edit 的 old_string/new_string）→ -/+/空格前缀行。
+// 输入是编辑片段（通常几十行），超大兜底成整段 -旧 +新，不做 O(n·m) 的表
+function unifiedDiffLines(oldStr, newStr) {
+  const a = String(oldStr ?? "").split("\n");
+  const b = String(newStr ?? "").split("\n");
+  if (a.length * b.length > 250_000) {
+    return [...a.map((l) => `-${l}`), ...b.map((l) => `+${l}`)].join("\n");
+  }
+  const n = a.length;
+  const m = b.length;
+  const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const out = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) out.push(` ${a[i++]}`), j++;
+    else if (dp[i + 1][j] >= dp[i][j + 1]) out.push(`-${a[i++]}`);
+    else out.push(`+${b[j++]}`);
+  }
+  while (i < n) out.push(`-${a[i++]}`);
+  while (j < m) out.push(`+${b[j++]}`);
+  return out.join("\n");
+}
+
+// Claude 的文件编辑工具 → 文件改动卡（与 codex patch_apply_end 同一 diff 渲染）；
+// 非编辑工具返回 null 走通用折叠行。成败留给 tool_result 回执（callId 配对）。
+function claudeEditDiffFiles(name, input) {
+  const n = String(name || "").toLowerCase();
+  const inp = input && typeof input === "object" ? input : {};
+  const path = inp.file_path || inp.notebook_path || inp.path;
+  if (!path || typeof path !== "string") return null;
+  if (n === "edit") {
+    if (typeof inp.old_string !== "string" || typeof inp.new_string !== "string") return null;
+    return [{ path, kind: "update", diff: unifiedDiffLines(inp.old_string, inp.new_string) }];
+  }
+  if (n === "multiedit") {
+    if (!Array.isArray(inp.edits) || !inp.edits.length) return null;
+    const parts = inp.edits.map((e, i) =>
+      `@@ ${i + 1}/${inp.edits.length} @@\n${unifiedDiffLines(e?.old_string ?? "", e?.new_string ?? "")}`);
+    return [{ path, kind: "update", diff: parts.join("\n") }];
+  }
+  if (n === "write") {
+    if (typeof inp.content !== "string") return null;
+    return [{ path, kind: "add", diff: inp.content.split("\n").map((l) => `+${l}`).join("\n") }];
+  }
+  if (n === "notebookedit") {
+    if (typeof inp.new_source !== "string") return null;
+    return [{ path, kind: "update", diff: inp.new_source.split("\n").map((l) => `+${l}`).join("\n") }];
+  }
+  return null;
+}
+
 // 工具 → 进行中的动词（活动行随当前工具动态显示）
 function claudeToolVerb(name) {
   const n = String(name || "").toLowerCase();
@@ -5745,12 +5994,13 @@ function claudeToolVerb(name) {
   if (n === "edit" || n === "write" || n === "multiedit" || n === "notebookedit") return t("act.edit");
   if (n === "task") return t("act.task");
   if (n === "todowrite") return t("act.todo");
+  if (n === "taskcreate" || n === "taskupdate") return t("act.tasks");
   return t("act.work");
 }
 
 // 一条 Claude 消息可含多块 → 返回气泡数组（渲染循环逐块 emit）。气泡 shape 与 itemToBubble 同形，
 // 故下游 bubbleNode/toolRow/attachToolOutput/imagesNode 全部复用；配对键 tool_use_id 塞进 callId 字段。
-// TodoWrite 不走工具卡：其 tool_use 由 trackClaudeActivity 抽成流末尾的计划清单，这里连同回执一并吞掉。
+// TodoWrite/TaskCreate/TaskUpdate 不走工具卡：由 trackClaudeActivity 抽成流末尾的计划/任务清单，这里连同回执一并吞掉。
 function claudeItemToBubbles(item) {
   const m = item.message || {};
   const role = m.role || item.type || "assistant";
@@ -5796,18 +6046,23 @@ function claudeItemToBubbles(item) {
       const text = String(b.thinking ?? b.text ?? "").trim();
       if (text) out.push({ cls: "think", text });
     } else if (bt === "tool_use") {
-      if (/^todowrite$/i.test(b.name || "")) {
+      if (/^(todowrite|taskcreate|taskupdate)$/i.test(b.name || "")) {
         if (b.id) app.todoCalls.add(b.id); // 记下 id，好吞掉它的 tool_result 回执
-        continue; // 计划清单由 trackClaudeActivity 单独渲染在流末尾
+        continue; // 计划/任务清单由 trackClaudeActivity 单独渲染在流末尾
       }
       const input = b.input ?? {};
+      const diffFiles = claudeEditDiffFiles(b.name, input);
+      if (diffFiles) {
+        out.push({ cls: "diff", files: diffFiles, ok: null, callId: b.id ?? null });
+        continue;
+      }
       out.push({
         cls: "tool", icon: claudeToolIcon(b.name), label: claudeToolLabel(b.name, input),
         detail: typeof input === "string" ? input : JSON.stringify(input, null, 2),
         callId: b.id ?? null,
       });
     } else if (bt === "tool_result") {
-      if (b.tool_use_id && app.todoCalls.has(b.tool_use_id)) continue; // TodoWrite 的"已更新"回执：噪音，吞掉
+      if (b.tool_use_id && app.todoCalls.has(b.tool_use_id)) continue; // TodoWrite/Task* 的回执：噪音，吞掉（TaskCreate 的 id 绑定已在 trackClaudeActivity 完成）
       out.push({
         cls: "toolout", callId: b.tool_use_id ?? null,
         text: claudeToolResultText(b.content), code: b.is_error ? 1 : 0,
@@ -5841,14 +6096,44 @@ function turnElapsed() {
   return Math.max(0, Date.now() - base);
 }
 
-// TodoWrite → 勾选清单节点（就地重建内容）
+// 任务表 → todos 形状快照（按数字 id 排序：加载更早历史时旧任务后到，插入序不可靠；
+// 非数字 id 兜底按字典序，排在数字后面）
+function tasksSnapshot() {
+  return [...app.tasks.entries()]
+    .sort((a, b) => {
+      const na = Number(a[0]), nb = Number(b[0]);
+      if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+      if (Number.isFinite(na)) return -1;
+      if (Number.isFinite(nb)) return 1;
+      return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0;
+    })
+    .map(([, v]) => v);
+}
+
+// TodoWrite / Task* → 勾选清单节点（就地重建内容）。标题带 完成数/总数，点标题折叠/展开
+// （对标终端 ctrl+t hide tasks：长清单在手机上会占满整屏）。折叠态存 app 级，重建不丢。
 function todosNode(todos) {
   const wrap = app.todoNode || document.createElement("div");
-  wrap.className = "todos";
+  wrap.className = `todos${app.todoCollapsed ? " collapsed" : ""}`;
   wrap.innerHTML = "";
   const hd = document.createElement("div");
   hd.className = "thd";
-  hd.textContent = t("todo.title");
+  const label = document.createElement("span");
+  label.textContent = t(app.taskMode ? "task.title" : "todo.title");
+  const cnt = document.createElement("span");
+  cnt.className = "tcnt";
+  cnt.textContent = `${todos.filter((td) => td?.status === "completed").length}/${todos.length}`;
+  const chev = document.createElement("span");
+  chev.className = "tchev";
+  chev.textContent = app.todoCollapsed ? "▸" : "▾";
+  hd.append(label, cnt, chev);
+  hd.onclick = () => {
+    app.todoCollapsed = !app.todoCollapsed;
+    const stick = nearBottom(); // 展开把清单撑高时别把贴底的读者甩下去
+    wrap.classList.toggle("collapsed", app.todoCollapsed);
+    chev.textContent = app.todoCollapsed ? "▸" : "▾";
+    if (stick) scrollToBottom();
+  };
   wrap.appendChild(hd);
   for (const td of todos) {
     const st = td?.status === "completed" ? "done" : td?.status === "in_progress" ? "doing" : "todo";
@@ -5946,6 +6231,70 @@ function trackClaudeActivity(item, live) {
     if (bt === "tool_use") {
       app.actVerb = claudeToolVerb(b.name);
       if (/^todowrite$/i.test(b.name || "") && Array.isArray(b.input?.todos)) app.pendingTodos = b.input.todos;
+      // 新版任务模式（TaskCreate/TaskUpdate 增量式）：客户端维护任务表，喂给同一套清单 UI。
+      // 历史回放与实时 tail 走同一条路径，重放同一条目也幂等（Map 按 taskId 覆盖）。
+      if (/^taskcreate$/i.test(b.name || "") && b.id) {
+        app.taskMode = true;
+        app.taskCreates.set(b.id, b.input || {}); // 任务 id 要等 tool_result 揭晓，先挂起
+      } else if (/^(taskget|tasklist)$/i.test(b.name || "") && b.id) {
+        // 回执带结构化任务（toolUseResult.task/tasks）：用来补全被历史窗口截掉的创建
+        app.taskPeeks.set(b.id, /^taskget$/i.test(b.name) ? "get" : "list");
+      } else if (/^taskupdate$/i.test(b.name || "")) {
+        app.taskMode = true;
+        const id = String(b.input?.taskId ?? "");
+        const tk = app.tasks.get(id);
+        if (tk) {
+          if (b.input?.status === "deleted") app.tasks.delete(id);
+          else {
+            if (b.input?.status) tk.status = b.input.status;
+            if (b.input?.subject) tk.content = b.input.subject;
+            if (b.input?.activeForm) tk.activeForm = b.input.activeForm;
+          }
+          app.pendingTodos = tasksSnapshot();
+        }
+      }
+    } else if (bt === "tool_result" && b.tool_use_id && app.taskCreates.has(b.tool_use_id)) {
+      // TaskCreate 回执：内容形如 "Task #3 created successfully: …"；jsonl 行顶层 toolUseResult
+      // 带结构化 id，优先用它，文本解析兜底。失败/被拒的调用（is_error）不入表。
+      const input = app.taskCreates.get(b.tool_use_id);
+      app.taskCreates.delete(b.tool_use_id);
+      const id = item.toolUseResult?.task?.id
+        ?? (claudeToolResultText(b.content).match(/Task #(\d+)/i)?.[1] ?? null);
+      if (id != null && !b.is_error) {
+        app.tasks.set(String(id), {
+          content: String(input.subject || "").trim(),
+          activeForm: String(input.activeForm || "").trim(),
+          status: "pending",
+        });
+        app.pendingTodos = tasksSnapshot();
+      }
+    } else if (bt === "tool_result" && b.tool_use_id && app.taskPeeks.has(b.tool_use_id)) {
+      // TaskGet/TaskList 回执对账：TaskList 是当刻权威全量（重建表），TaskGet 单条 upsert。
+      // 主要救"首屏窗口从 TaskCreate 之后开始"的场景——增量流缺了创建，清单才不至于空/缺项。
+      const kind = app.taskPeeks.get(b.tool_use_id);
+      app.taskPeeks.delete(b.tool_use_id);
+      const tur = item.toolUseResult;
+      const list = b.is_error || !tur ? null
+        : kind === "list" ? (Array.isArray(tur.tasks) ? tur.tasks : null)
+        : (tur.task && tur.task.id != null ? [tur.task] : null);
+      if (list) {
+        const prev = app.tasks;
+        if (kind === "list") app.tasks = new Map();
+        for (const tk of list) {
+          if (tk?.id == null) continue;
+          const id = String(tk.id);
+          const old = prev.get(id);
+          app.tasks.set(id, {
+            content: String(tk.subject ?? old?.content ?? "").trim(),
+            activeForm: old?.activeForm || "", // 回执不带 activeForm，沿用已知的
+            status: tk.status || old?.status || "pending",
+          });
+        }
+        if (app.tasks.size || kind === "list") {
+          app.taskMode = true;
+          app.pendingTodos = tasksSnapshot();
+        }
+      }
     } else if (bt === "thinking" || bt === "redacted_thinking") {
       app.actVerb = t("act.think");
     } else if (bt === "text" && String(b.text || "").trim()) {
@@ -6449,7 +6798,7 @@ function onLive(event, params) {
 function renderFullSnapshotItems(items, { snapshotEnd = false, loadedCount = null } = {}) {
   if (!app.replayMode && loadedCount != null) setHistoryLoadedCount(loadedCount);
   $("log").innerHTML = "";
-  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; clearTimeout(app.claudeIdle); app.claudeIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
+  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.claudeIdle); app.claudeIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
   app.seenImages.clear(); // 快照重放会重发同批 imageRef
   app.stream = null; // 元素已随 log 清空
   app.proc = null;
@@ -6703,7 +7052,7 @@ async function switchDaemon(id) {
   updateStatusPill();
   app.view = "list"; app.currentId = null;
   app.echoes = [];
-  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; clearTimeout(app.claudeIdle); app.claudeIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
+  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.claudeIdle); app.claudeIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
   app.seenImages.clear();
   app.stream = null;
   app.proc = null;
@@ -7091,7 +7440,8 @@ async function main() {
   bindReplaySentinel(); // 回放模式的底部继续加载哨兵
   $("send").onclick = sendMessage;
   $("stop").onclick = stopTurn;
-  $("input").addEventListener("input", () => { autoGrow(); updateSendState(); });
+  $("input").addEventListener("input", () => { autoGrow(); updateSendState(); updateSuggest(); });
+  $("input").addEventListener("blur", () => setTimeout(hideSuggest, 150)); // 延迟：让面板的 pointerdown 先落地
   // ➕ 动作菜单：拍照 / 选照片 / 粘贴图片
   $("attach").onclick = (e) => {
     e.stopPropagation();
@@ -7141,6 +7491,23 @@ async function main() {
   $("modelsheet").onclick = (e) => { if (e.target === $("modelsheet")) $("modelsheet").classList.remove("open"); };
   // 桌面（精确指针）Enter 发送、Shift+Enter 换行；手机键盘 Enter 保持换行；中文输入法合成中不触发
   $("input").addEventListener("keydown", (e) => {
+    // 建议面板打开时接管方向/回车/Tab/Esc（先于"回车发送"）
+    if (sug.mode && !e.isComposing) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        moveSuggest(e.key === "ArrowDown" ? 1 : -1);
+        return;
+      }
+      if ((e.key === "Enter" || e.key === "Tab") && !e.shiftKey) {
+        e.preventDefault();
+        applySuggest(sug.hi);
+        return;
+      }
+      if (e.key === "Escape") {
+        hideSuggest();
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing && matchMedia("(pointer: fine)").matches) {
       e.preventDefault();
       sendMessage();
