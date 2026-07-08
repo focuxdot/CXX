@@ -89,7 +89,7 @@ irm https://github.com/focuxdot/CXX/releases/latest/download/install.ps1 | iex
 
 The installer downloads the latest GitHub Release package and opens CXX; Windows verifies `checksums.txt` first.
 
-Package downloads: [CXX-macos.dmg](https://github.com/focuxdot/CXX/releases/latest/download/CXX-macos.dmg) · [CXX-win-x64.exe](https://github.com/focuxdot/CXX/releases/latest/download/CXX-win-x64.exe)
+Package downloads: [CXX-0.1.2-macos.dmg](https://github.com/focuxdot/CXX/releases/download/v0.1.2/CXX-0.1.2-macos.dmg) · [CXX-0.1.2-win-x64.exe](https://github.com/focuxdot/CXX/releases/download/v0.1.2/CXX-0.1.2-win-x64.exe)
 
 After installation, open **CXX** from the desktop or Start menu. It opens the pairing window directly. The background daemon lives under the install directory's `resources` folder; the user-facing entry point is `CXX.exe`.
 

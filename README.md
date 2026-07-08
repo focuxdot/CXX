@@ -87,7 +87,7 @@ irm https://github.com/focuxdot/CXX/releases/latest/download/install.ps1 | iex
 
 安装脚本会下载最新 GitHub Release 里的安装包并打开 CXX；Windows 会先校验 `checksums.txt`。
 
-备用安装包： [CXX-macos.dmg](https://github.com/focuxdot/CXX/releases/latest/download/CXX-macos.dmg) · [CXX-win-x64.exe](https://github.com/focuxdot/CXX/releases/latest/download/CXX-win-x64.exe)
+备用安装包： [CXX-0.1.2-macos.dmg](https://github.com/focuxdot/CXX/releases/download/v0.1.2/CXX-0.1.2-macos.dmg) · [CXX-0.1.2-win-x64.exe](https://github.com/focuxdot/CXX/releases/download/v0.1.2/CXX-0.1.2-win-x64.exe)
 
 安装完成后，从桌面或开始菜单打开 **CXX**，会直接弹出扫码配对窗口。后台程序在安装目录的 `resources` 里，用户入口就是 `CXX.exe`。
 
