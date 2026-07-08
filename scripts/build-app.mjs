@@ -140,6 +140,8 @@ if (makeDmg) {
     "-ov",
     "-format",
     "UDZO",
+    "-size",
+    process.env.CXX_DMG_SIZE || "300m",
     dmg,
   ]);
   console.log(`✓ built ${dmg}`);
