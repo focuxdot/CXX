@@ -14,6 +14,7 @@ import {
   saveConfig,
 } from "./config.mjs";
 import { deriveSessionKey, open as sealedOpen, seal } from "./crypto.mjs";
+import { listClaudeCommands, searchFiles } from "./file-search.mjs";
 import { readRolloutWindow, RolloutTail } from "./rollout-tail.mjs";
 
 // 手机端鉴权时上报的设备短标签（如「iPhone · 微信」）净化后作 device.name 显示用：
@@ -600,6 +601,40 @@ export class ClientSession {
         up.parts.push(data);
         if (eof) up.done = true;
         this.#reply(message.id, { ok: true });
+        return;
+      }
+      case "files.search": {
+        // 手机端 @ 文件补全：限定在允许的工作目录内做有界模糊查找（见 file-search.mjs）
+        const { cwd, query } = message.params ?? {};
+        if (typeof cwd !== "string" || !cwd) {
+          this.#reply(message.id, null, { code: 400, message: "缺少 cwd" });
+          return;
+        }
+        if (!this.#daemon.isCwdAllowed(cwd)) {
+          this.#reply(message.id, null, { code: 403, message: "该目录不在允许列表中" });
+          return;
+        }
+        const limit = Math.max(1, Math.min(50, Number(message.params?.limit) || 20));
+        try {
+          this.#reply(message.id, { files: await searchFiles(cwd, typeof query === "string" ? query : "", limit) });
+        } catch (err) {
+          this.#reply(message.id, null, { code: 500, message: `文件查找失败: ${err.message}` });
+        }
+        return;
+      }
+      case "commands.list": {
+        // 斜杠命令面板数据源：Claude 自定义命令（用户级 + 项目级）。cwd 可缺省（只回用户级）。
+        const { cwd } = message.params ?? {};
+        if (cwd !== undefined && typeof cwd !== "string") {
+          this.#reply(message.id, null, { code: 400, message: "cwd 参数非法" });
+          return;
+        }
+        const projectCwd = cwd && this.#daemon.isCwdAllowed(cwd) ? cwd : null;
+        try {
+          this.#reply(message.id, { commands: await listClaudeCommands(projectCwd) });
+        } catch (err) {
+          this.#reply(message.id, null, { code: 500, message: `命令列表失败: ${err.message}` });
+        }
         return;
       }
       case "turn.interrupt": {
