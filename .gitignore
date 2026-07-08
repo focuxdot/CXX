@@ -8,6 +8,10 @@ release-assets/
 internal/
 docs/
 
+# private Worker entrypoints/configs belong under internal/; keep old local names out
+relay/worker/src/*.local.mjs
+relay/worker/wrangler*.local.toml
+
 # maintainer-only git account-safety tooling — machine-local, references a personal
 # SSH identity; kept on disk so it stays active locally but never published
 .githooks/

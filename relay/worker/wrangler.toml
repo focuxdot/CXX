@@ -2,6 +2,10 @@ name = "cxx-relay"
 main = "src/worker.mjs"
 compatibility_date = "2026-06-01"
 
+# Public self-hosting config. Keep this file free of official Wokey routes,
+# Analytics Engine, Telegram, stats tokens, or other operator-only bindings.
+# The ignored official deployment config lives under ../../internal/relay-worker/.
+#
 # Where your relay is reachable. Pick one:
 #   1. Easiest — leave `routes` unset and `wrangler deploy` puts it on the free
 #      *.workers.dev subdomain Cloudflare gives you. Point the daemon at it with

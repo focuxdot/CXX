@@ -4,6 +4,19 @@ const HB_TIMEOUT_MS = 10000; // hb 发出后这么久没回包即判链路死亡
 const BACKOFF_BASE_MS = 1000;
 const BACKOFF_MAX_MS = 15000; // 上限太高会让电脑唤醒后长时间假离线
 
+export function daemonRelayUrl(
+  relayUrl,
+  daemonId,
+  { platform = globalThis.process?.platform, app = "cxx" } = {},
+) {
+  const base = relayUrl.replace(/\/$/, "");
+  const params = new URLSearchParams();
+  if (platform) params.set("os", String(platform));
+  if (app) params.set("app", String(app));
+  const query = params.toString();
+  return `${base}/v1/daemon/${daemonId}${query ? `?${query}` : ""}`;
+}
+
 export class RelayLink {
   #url;
   #handlers; // { onOpen(cid), onMessage(cid, data), onClose(cid), log }
@@ -14,7 +27,7 @@ export class RelayLink {
   #closed = false;
 
   constructor(relayUrl, daemonId, handlers) {
-    this.#url = `${relayUrl.replace(/\/$/, "")}/v1/daemon/${daemonId}`;
+    this.#url = daemonRelayUrl(relayUrl, daemonId);
     this.#handlers = handlers;
   }
 
