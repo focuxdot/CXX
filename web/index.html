@@ -218,6 +218,30 @@ try {
   .sheetnote { font-size: 12px; color: var(--dim); padding: 10px 10px 0; line-height: 1.6; }
   .drow .ddot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
   .drow.active .ddot { background: var(--ok); }
+  #diaglist { padding: 4px 2px 2px; }
+  .diagchain { padding: 12px 4px 4px; }
+  .diagsteps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+               align-items: center; margin: 4px 0 12px; }
+  .diagstep { position: relative; display: flex; align-items: center; justify-content: center;
+              min-height: 24px; }
+  .diagstep:not(:last-child)::after { content: ""; position: absolute;
+                                      left: calc(50% + 10px); right: calc(-50% + 10px);
+                                      top: 50%; height: 2px; transform: translateY(-50%);
+                                      border-radius: 999px; background: var(--border); z-index: 0; }
+  .diagstep.link-ok::after { background: var(--ok); opacity: .55; }
+  .diagstep.link-warn::after { background: var(--warn); opacity: .7; }
+  .diagstep.link-down::after { background: var(--err); opacity: .75; }
+  .diagdot { position: relative; z-index: 1; width: 14px; height: 14px; border-radius: 50%;
+             background: var(--dim); box-shadow: 0 0 0 4px var(--raised); }
+  .diagdot.ok { background: var(--ok); }
+  .diagdot.warn { background: var(--warn); }
+  .diagdot.down { background: var(--err); }
+  .diaglabels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .diaglabel { min-width: 0; text-align: center; }
+  .diagtitle { color: var(--text); font-size: 13px; font-weight: 600; line-height: 1.35;
+               overflow-wrap: anywhere; }
+  .diagsub { margin-top: 4px; color: var(--dim); font-size: 12px; line-height: 1.45;
+             overflow-wrap: anywhere; }
   .forkbox { padding-top: 22px; }
   .forkhero { display: flex; flex-direction: column; gap: 14px; margin-bottom: 24px; }
   .forkhero .forkicon { width: 66px; height: 66px; border-radius: 22px; background: var(--sunken);
@@ -976,6 +1000,8 @@ const I18N = {
     "time.minago": "{0} 分钟前",
     "time.hourago": "{0} 小时前",
     "time.dayago": "{0} 天前",
+    "diag.phone": "手机",
+    "diag.relay": "中继",
     "diag.pc": "电脑",
     "diag.phone_relay": "手机 ↔ 中继",
     "diag.relay_pc": "中继 ↔ {0}",
@@ -1276,6 +1302,8 @@ const I18N = {
     "time.minago": "{0} min ago",
     "time.hourago": (n) => `${n} hour${n == 1 ? "" : "s"} ago`,
     "time.dayago": (n) => `${n} day${n == 1 ? "" : "s"} ago`,
+    "diag.phone": "Phone",
+    "diag.relay": "Relay",
     "diag.pc": "Computer",
     "diag.phone_relay": "Phone ↔ Relay",
     "diag.relay_pc": "Relay ↔ {0}",
@@ -2970,22 +2998,49 @@ function sessionDirLabel() {
   return cwd.split(/[\\/]/).pop() || "";
 }
 
-function diagRow(state, title, sub) {
-  const row = document.createElement("div");
-  row.className = "drow";
-  row.style.cursor = "default";
-  const dot = document.createElement("span");
-  dot.className = `ddot${state ? ` ${state}` : ""}`;
-  const main = document.createElement("div");
-  main.className = "dname";
-  const t = document.createElement("div");
-  t.textContent = title;
-  const d = document.createElement("div");
-  d.className = "dsub wrap";
-  d.textContent = sub;
-  main.append(t, d);
-  row.append(dot, main);
-  return row;
+function diagPoint(state, title, sub, linkAfter = "") {
+  return { state, title, sub, linkAfter };
+}
+
+function diagLinkState(left, right) {
+  if (left.state === "down" || right.state === "down") return "down";
+  if (left.state === "warn" || right.state === "warn") return "warn";
+  if (left.state === "ok" && right.state === "ok") return "ok";
+  return "";
+}
+
+function diagChain(items) {
+  const chain = document.createElement("div");
+  chain.className = "diagchain";
+  const steps = document.createElement("div");
+  steps.className = "diagsteps";
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const link = i < items.length - 1 ? (item.linkAfter || diagLinkState(item, items[i + 1])) : "";
+    const step = document.createElement("div");
+    step.className = `diagstep${link ? ` link-${link}` : ""}`;
+    const dot = document.createElement("span");
+    dot.className = `diagdot${item.state ? ` ${item.state}` : ""}`;
+    dot.setAttribute("aria-hidden", "true");
+    step.appendChild(dot);
+    steps.appendChild(step);
+  }
+  const labels = document.createElement("div");
+  labels.className = "diaglabels";
+  for (const item of items) {
+    const label = document.createElement("div");
+    label.className = "diaglabel";
+    const title = document.createElement("div");
+    title.className = "diagtitle";
+    title.textContent = item.title;
+    const sub = document.createElement("div");
+    sub.className = "diagsub";
+    sub.textContent = item.sub;
+    label.append(title, sub);
+    labels.appendChild(label);
+  }
+  chain.append(steps, labels);
+  return chain;
 }
 
 function renderDiag() {
@@ -2993,41 +3048,62 @@ function renderDiag() {
   box.innerHTML = "";
   const relayHost = (app.session?.info.relay || "").replace(/^wss?:\/\//, "").replace(/[/?#].*$/, "");
   const pcName = app.session?.info.name || t("diag.pc");
+  const phoneRelayLink = net.link === "ok" ? "ok" : net.link === "down" ? "down" : "";
+  const relayPcLink = net.link !== "ok" ? "" : net.daemon === true ? "ok" : net.daemon === false ? "down" : "";
+  let phoneState = "";
+  let phoneSub = t("status.connecting");
+  let relayState = "";
+  let relaySub = t("diag.waiting");
+  let pcState = "";
+  let pcSub = t("diag.codex_unknown");
 
-  // 1. 手机 ↔ 中继
+  // 1. 手机：浏览器到中继的连接
   if (net.link === "ok") {
-    box.appendChild(diagRow("ok", t("diag.phone_relay"), t("diag.connected_host", relayHost)));
+    phoneState = "ok";
+    phoneSub = t("diag.connected_host", relayHost);
   } else if (net.link === "connecting") {
-    box.appendChild(diagRow("", t("diag.phone_relay"), t("status.connecting")));
+    phoneSub = t("status.connecting");
   } else {
-    box.appendChild(diagRow("down", t("diag.phone_relay"),
-      t("diag.phone_relay_down")));
+    phoneState = "down";
+    phoneSub = t("diag.phone_relay_down");
   }
 
-  // 2. 中继 ↔ 电脑
+  // 2. 中继：手机连上中继后，中继本身可达
   if (net.link !== "ok") {
-    box.appendChild(diagRow("", t("diag.relay_pc", pcName), t("diag.unknown_relay")));
+    relaySub = t("diag.unknown_relay");
+  } else {
+    relayState = "ok";
+    relaySub = t("diag.connected_host", relayHost);
+  }
+
+  // 3. 电脑：电脑 Remote 与本机 Codex/Claude 引擎状态
+  if (net.link !== "ok") {
+    pcSub = t("diag.codex_unknown");
   } else if (net.daemon === true) {
-    box.appendChild(diagRow("ok", t("diag.relay_pc", pcName), t("diag.online")));
+    if (net.engine === "down") {
+      pcState = "warn";
+      pcSub = `${pcName} · ${t("diag.codex_down")}`;
+    } else if (net.engine === "ok") {
+      pcState = "ok";
+      pcSub = `${pcName} · ${t("diag.codex_ok")}`;
+    } else {
+      // 已连上且鉴权成功，但电脑端 Remote 较旧、没带运行状态字段——程序其实在跑
+      pcState = "ok";
+      pcSub = `${pcName} · ${t("diag.codex_oldremote")}`;
+    }
   } else if (net.daemon === false) {
     const seen = net.lastSeen ? t("diag.lastseen", relTime(net.lastSeen / 1000)) : "";
-    box.appendChild(diagRow("down", t("diag.relay_pc", pcName),
-      t("diag.pc_offline_detail", seen)));
+    pcState = "down";
+    pcSub = t("diag.pc_offline_detail", seen);
   } else {
-    box.appendChild(diagRow("", t("diag.relay_pc", pcName), t("diag.waiting")));
+    pcSub = t("diag.waiting");
   }
 
-  // 3. Codex 主程序（电脑上真正跑对话的 Codex 程序）
-  if (net.link !== "ok" || net.daemon !== true) {
-    box.appendChild(diagRow("", t("diag.codex"), t("diag.codex_unknown")));
-  } else if (net.engine === "down") {
-    box.appendChild(diagRow("warn", t("diag.codex"), t("diag.codex_down")));
-  } else if (net.engine === "ok") {
-    box.appendChild(diagRow("ok", t("diag.codex"), t("diag.codex_ok")));
-  } else {
-    // 已连上且鉴权成功，但电脑端 Remote 较旧、没带运行状态字段——程序其实在跑
-    box.appendChild(diagRow("ok", t("diag.codex"), t("diag.codex_oldremote")));
-  }
+  box.appendChild(diagChain([
+    diagPoint(phoneState, t("diag.phone"), phoneSub, phoneRelayLink),
+    diagPoint(relayState, t("diag.relay"), relaySub, relayPcLink),
+    diagPoint(pcState, t("diag.pc"), pcSub),
+  ]));
 }
 
 function openDiag() {
