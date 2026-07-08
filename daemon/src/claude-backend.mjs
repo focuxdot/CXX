@@ -12,11 +12,11 @@
 // raw entries lives on the web side's separate render path.
 import { spawn } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { createServer } from "node:http";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { CachedProjects, normSep } from "./project-index.mjs";
@@ -47,9 +47,7 @@ const HEAD_BYTES = 64 * 1024;
 const HEAD_MAX_BYTES = 512 * 1024;
 const TAIL_BYTES = 64 * 1024;
 const MODEL_LIST_CACHE_MS = 5 * 60 * 1000;
-const MODEL_LIST_TIMEOUT_MS = 8000;
-const MODEL_SCAN_LIMIT = 200;
-const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/;
+const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/@+\-[\]]{0,127}$/;
 const CLAUDE_MODEL_EFFORTS = ["low", "medium", "high", "xhigh"];
 const CLAUDE_ALLOWED_EFFORTS = new Set([...CLAUDE_MODEL_EFFORTS, "max"]);
 const CLAUDE_FALLBACK_MODELS = [
@@ -116,17 +114,17 @@ function readClaudeSettings() {
 
 function claudeLocalConfig() {
   const settings = readClaudeSettings();
+  const state = readClaudeState();
   const settingsEnv = settings?.env && typeof settings.env === "object" ? settings.env : {};
-  return { settings, env: { ...settingsEnv, ...process.env } };
+  return { settings, state, env: { ...settingsEnv, ...process.env } };
 }
 
-function modelListUrl(baseUrl) {
-  const url = new URL(baseUrl);
-  const path = url.pathname.replace(/\/+$/, "");
-  url.pathname = `${path.endsWith("/v1") ? path : `${path}/v1`}/models`;
-  url.search = "";
-  url.hash = "";
-  return url.toString();
+function readClaudeState() {
+  try {
+    return JSON.parse(readFileSync(join(homedir(), ".claude.json"), "utf8"));
+  } catch {
+    return {};
+  }
 }
 
 function configuredDefaultModel(settings, env) {
@@ -140,15 +138,37 @@ function configuredDefaultModel(settings, env) {
   );
 }
 
-function modelIdsFromItem(item) {
+function configuredModelOptions(state) {
   return [
-    item?.message?.model,
-    item?.model,
-    item?.model_id,
-    item?.modelId,
-    item?.request?.model,
-    item?.response?.model,
-  ].filter(isUsableModelId);
+    ...modelOptionsFromValue(state?.additionalModelOptionsCache),
+    ...modelOptionsFromValue(state?.modelAccessCache),
+    ...modelOptionsFromValue(state?.orgModelDefaultCache),
+  ];
+}
+
+function modelOptionsFromValue(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.flatMap(modelOptionsFromValue);
+  if (typeof value === "string") return isUsableModelId(value) ? [{ id: value, model: value }] : [];
+  if (typeof value !== "object") return [];
+
+  const direct = firstString(value.value, value.model, value.modelId, value.model_id, value.id);
+  const out = [];
+  if (isUsableModelId(direct)) {
+    out.push({
+      id: direct,
+      model: direct,
+      displayName: firstString(value.label, value.displayName, value.display_name, value.name),
+      description: firstString(value.description),
+    });
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (["value", "model", "modelId", "model_id", "id", "label", "displayName", "display_name", "name", "description"].includes(key)) {
+      continue;
+    }
+    out.push(...modelOptionsFromValue(child));
+  }
+  return out;
 }
 
 function normalizeModel(raw) {
@@ -201,7 +221,10 @@ function mergeModels(groups, defaultId) {
   const pickedDefault = defaultId && seen.has(defaultId)
     ? defaultId
     : CLAUDE_DEFAULT_MODEL_CANDIDATES.find((id) => seen.has(id)) ?? out[0]?.id;
-  return out.map((m) => ({ ...m, isDefault: m.id === pickedDefault }));
+  const models = out.map((m) => ({ ...m, isDefault: m.id === pickedDefault }));
+  const defaultIndex = models.findIndex((m) => m.isDefault);
+  if (defaultIndex > 0) models.unshift(models.splice(defaultIndex, 1)[0]);
+  return models;
 }
 
 export class ClaudeBackend {
@@ -223,6 +246,8 @@ export class ClaudeBackend {
   // Default headless permission mode passed to `claude -p`.
   #defaultPermissionMode;
   #modelCache = null;
+  #archivePath;
+  #archiveState = null; // sessionId -> { archivedAt }
 
   // —— approval routing (PreToolUse hook → localhost endpoint → phone) ——
   #approvalServer = null;
@@ -239,10 +264,11 @@ export class ClaudeBackend {
   onServerRequestCancel = () => {}; // (id) — approval no longer decidable (turn ended); hub drops the card
   onStateChange = () => {}; // (healthy: bool)
 
-  constructor({ command = "claude", log = () => {}, permissionMode = "default" } = {}) {
+  constructor({ command = "claude", log = () => {}, permissionMode = "default", archivePath = null } = {}) {
     this.#command = command;
     this.#log = log;
     this.#defaultPermissionMode = permissionMode;
+    this.#archivePath = archivePath ?? join(homedir(), ".cxx", "remote", "claude-archive.json");
   }
 
   // No server to connect to — reads are always available. `healthy` reflects that the
@@ -372,6 +398,7 @@ export class ClaudeBackend {
       for (const f of files) {
         if (!f.isFile() || !f.name.endsWith(".jsonl")) continue;
         const id = f.name.slice(0, -".jsonl".length);
+        if (this.#isArchived(id)) continue;
         const path = join(dir, f.name);
         let mtimeMs = 0;
         try {
@@ -385,6 +412,35 @@ export class ClaudeBackend {
     }
     out.sort((a, b) => b.mtimeMs - a.mtimeMs);
     return out;
+  }
+
+  #archiveMap() {
+    if (this.#archiveState) return this.#archiveState;
+    const map = new Map();
+    try {
+      const body = JSON.parse(readFileSync(this.#archivePath, "utf8"));
+      const sessions = body?.sessions && typeof body.sessions === "object" ? body.sessions : {};
+      for (const [id, value] of Object.entries(sessions)) {
+        if (typeof id !== "string" || !id) continue;
+        const archivedAt = typeof value?.archivedAt === "number" ? value.archivedAt : Date.now();
+        map.set(id, { archivedAt });
+      }
+    } catch {
+      // Missing or corrupt archive state behaves as an empty hidden set.
+    }
+    this.#archiveState = map;
+    return map;
+  }
+
+  #writeArchiveMap() {
+    const sessions = {};
+    for (const [id, value] of this.#archiveMap()) sessions[id] = value;
+    mkdirSync(dirname(this.#archivePath), { recursive: true, mode: 0o700 });
+    writeFileSync(this.#archivePath, `${JSON.stringify({ v: 1, sessions }, null, 2)}\n`, { mode: 0o600 });
+  }
+
+  #isArchived(id) {
+    return this.#archiveMap().has(id);
   }
 
   // Locate a session file by id — cache first, then a direct scan (deep-link watch
@@ -501,6 +557,7 @@ export class ClaudeBackend {
       updatedAt: Math.floor(mtimeMs),
       source: "claude",
       status: "unknown",
+      archived: this.#isArchived(id),
       path,
     };
   }
@@ -567,6 +624,24 @@ export class ClaudeBackend {
     const out = [];
     for (const s of slice) out.push(await this.#mapSession(s));
     return out;
+  }
+
+  async archiveThread(threadId) {
+    const path = this.#findFile(threadId);
+    if (!path) throw new Error("会话不存在");
+    this.#archiveMap().set(threadId, { archivedAt: Date.now() });
+    this.#writeArchiveMap();
+    this.#projects.invalidate();
+    this.onNotification("thread/archived", { threadId });
+    return { ok: true };
+  }
+
+  async unarchiveThread(threadId) {
+    if (!this.#archiveMap().delete(threadId)) return { ok: true };
+    this.#writeArchiveMap();
+    this.#projects.invalidate();
+    this.onNotification("thread/unarchived", { threadId });
+    return { ok: true };
   }
 
   // —— write API ——
@@ -728,77 +803,20 @@ export class ClaudeBackend {
     return { type: "user", message: { role: "user", content } };
   }
 
-  async #configuredModels() {
-    const { env } = claudeLocalConfig();
-    const baseUrl = firstString(env.ANTHROPIC_BASE_URL);
-    if (!baseUrl) return [];
-    const headers = { accept: "application/json", "anthropic-version": "2023-06-01" };
-    if (env.ANTHROPIC_AUTH_TOKEN) headers.authorization = `Bearer ${env.ANTHROPIC_AUTH_TOKEN}`;
-    if (env.ANTHROPIC_API_KEY) headers["x-api-key"] = env.ANTHROPIC_API_KEY;
-
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), MODEL_LIST_TIMEOUT_MS);
-    try {
-      const res = await fetch(modelListUrl(baseUrl), { headers, signal: ac.signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const body = await res.json();
-      const items = Array.isArray(body?.data) ? body.data : Array.isArray(body?.models) ? body.models : [];
-      return items.map((m) => ({
-        id: m.id ?? m.model ?? m.name,
-        model: m.id ?? m.model ?? m.name,
-        displayName: m.displayName ?? m.display_name ?? m.name,
-        description: m.description,
-      }));
-    } catch (err) {
-      this.#log(`读取 Claude 本机模型接口失败，改用本地历史/兜底: ${err.message}`);
-      return [];
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
-  async #historyModels() {
-    const seen = new Set();
-    const out = [];
-    for (const session of this.#allSessions().slice(0, MODEL_SCAN_LIMIT)) {
-      let handle;
-      try {
-        handle = await open(session.path, "r");
-        const info = await handle.stat();
-        if (info.size <= 0) continue;
-        const len = Math.min(TAIL_BYTES, info.size);
-        const buf = Buffer.alloc(len);
-        await handle.read(buf, 0, len, info.size - len);
-        for (const item of parseJsonlChunk(buf.toString("utf8")).items) {
-          for (const id of modelIdsFromItem(item)) {
-            if (seen.has(id)) continue;
-            seen.add(id);
-            out.push({ id, model: id });
-          }
-        }
-      } catch {
-        // Ignore corrupt or concurrently-written session files.
-      } finally {
-        await handle?.close();
-      }
-    }
-    return out;
-  }
-
   async #models() {
     const now = Date.now();
     if (this.#modelCache && now - this.#modelCache.at < MODEL_LIST_CACHE_MS) return this.#modelCache.data;
-    const { settings, env } = claudeLocalConfig();
+    const { settings, state, env } = claudeLocalConfig();
     const defaultModel = configuredDefaultModel(settings, env);
-    const [configured, history] = await Promise.all([this.#configuredModels(), this.#historyModels()]);
+    const configuredOptions = configuredModelOptions(state);
     const explicitDefault = isUsableModelId(defaultModel) ? [{ id: defaultModel, model: defaultModel }] : [];
-    const data = mergeModels([configured, history, explicitDefault, CLAUDE_FALLBACK_MODELS], defaultModel);
+    const data = mergeModels([explicitDefault, configuredOptions, CLAUDE_FALLBACK_MODELS], defaultModel);
     this.#modelCache = { at: now, data };
     return data;
   }
 
-  // Generic RPC shim. model/list prefers the local Claude Code configuration
-  // (ANTHROPIC_BASE_URL / token), then local session history, then a tiny fallback.
+  // Generic RPC shim. model/list stays local to the computer being controlled:
+  // explicit Claude settings/env model, Claude Code's local config cache, then a tiny fallback.
   async request(method) {
     if (method === "model/list") {
       return { data: await this.#models() };

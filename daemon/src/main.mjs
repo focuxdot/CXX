@@ -136,9 +136,12 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
     await appServer.start();
   } catch (err) {
     // 引擎起不来最常见就是找不到 codex——给壳一条可读的错误而不是裸 ENOENT。
+    const errText = String(err?.message ?? err);
     const hint =
-      resolvedCodex === "codex" || /ENOENT/.test(String(err))
+      resolvedCodex === "codex" || /ENOENT/.test(errText)
         ? "：未找到 codex，请先安装官方 Codex（codex --version 应可用），或用 --codex <路径> 指定"
+        : /EPERM|EACCES/i.test(errText)
+          ? "：无法执行 codex，请确认 Windows 上指向的是 codex.exe/codex.cmd；如当前是 codex.ps1，可用 --codex 指定同目录的 codex.cmd"
         : "";
     throw new Error(`codex app-server 启动失败${hint}（${err.message}）`);
   }
@@ -231,6 +234,7 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
         command: resolvedClaude,
         log,
         permissionMode: config.claudePermissionMode || "default",
+        archivePath: join(dirname(configPath), "claude-archive.json"),
       });
       await claudeBackend.start();
       // 每个后端一套 SessionHub：各自持有 resume 状态/审批/当前 turn。Claude hub 与

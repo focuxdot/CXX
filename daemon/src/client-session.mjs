@@ -429,7 +429,7 @@ export class ClientSession {
         const attention = [];
         for (const id of attnIds) {
           const th = await backend.readThread(id);
-          if (!th) continue;
+          if (!th || th.archived) continue;
           attention.push({
             id: th.id,
             cwd: th.cwd,
@@ -672,6 +672,66 @@ export class ClientSession {
           this.#reply(message.id, await this.#hub(agent).forkThread(sessionId));
         } catch (err) {
           this.#reply(message.id, null, { code: 500, message: `打分支失败: ${err.message}` });
+        }
+        return;
+      }
+      case "session.archive": {
+        const { sessionId } = message.params ?? {};
+        if (!sessionId) {
+          this.#reply(message.id, null, { code: 400, message: "缺少 sessionId" });
+          return;
+        }
+        try {
+          this.#reply(message.id, await this.#hub(this.#agentOf(message.params)).archiveThread(sessionId));
+        } catch (err) {
+          this.#reply(message.id, null, { code: 500, message: `归档失败: ${err.message}` });
+        }
+        return;
+      }
+      case "session.unarchive": {
+        const { sessionId } = message.params ?? {};
+        if (!sessionId) {
+          this.#reply(message.id, null, { code: 400, message: "缺少 sessionId" });
+          return;
+        }
+        try {
+          this.#reply(message.id, await this.#hub(this.#agentOf(message.params)).unarchiveThread(sessionId));
+        } catch (err) {
+          this.#reply(message.id, null, { code: 500, message: `取消归档失败: ${err.message}` });
+        }
+        return;
+      }
+      case "project.archive": {
+        const { cwd } = message.params ?? {};
+        if (typeof cwd !== "string" || !cwd.trim()) {
+          this.#reply(message.id, null, { code: 400, message: "缺少 cwd" });
+          return;
+        }
+        const agent = this.#agentOf(message.params);
+        const backend = this.#backend(agent);
+        const ids = [];
+        const seen = new Set();
+        let cursor = null;
+        try {
+          for (let guard = 0; guard < 120; guard++) {
+            const page = await backend.listThreadsPage({ cwd, cursor, limit: 2000 });
+            for (const s of page.items ?? []) {
+              if (s?.id && !seen.has(s.id)) {
+                seen.add(s.id);
+                ids.push(s.id);
+              }
+            }
+            cursor = page.nextCursor ?? null;
+            if (!cursor) break;
+          }
+          let archived = 0;
+          for (const sessionId of ids) {
+            await this.#hub(agent).archiveThread(sessionId);
+            archived++;
+          }
+          this.#reply(message.id, { ok: true, archived });
+        } catch (err) {
+          this.#reply(message.id, null, { code: 500, message: `归档项目失败: ${err.message}` });
         }
         return;
       }

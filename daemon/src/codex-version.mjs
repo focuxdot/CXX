@@ -10,6 +10,8 @@
 // string format change must never brick startup for users on a perfectly new codex.
 import { execFileSync } from "node:child_process";
 
+import { codexInvocation } from "./codex-path.mjs";
+
 // Documented minimum. Bump alongside the compat matrix (see docs) once a newer floor is
 // verified. 0.142.x is the first release where the full app-server chain was validated.
 export const MIN_CODEX_VERSION = "0.142.0";
@@ -33,7 +35,8 @@ export function compareVersion(a, b) {
 // Run `<command> --version` and return its raw stdout (trimmed), or null on any failure.
 export function readCodexVersion(command) {
   try {
-    return execFileSync(command, ["--version"], {
+    const invocation = codexInvocation(command, ["--version"]);
+    return execFileSync(invocation.command, invocation.args, {
       encoding: "utf8",
       timeout: 5000,
       stdio: ["ignore", "pipe", "ignore"],

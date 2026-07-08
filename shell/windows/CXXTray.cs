@@ -316,6 +316,9 @@ namespace CXX
         readonly List<Form> windows = new List<Form>();
         readonly EventWaitHandle pairEvent;
         readonly System.Windows.Forms.Timer pairTimer;
+        const int RemoteStartupTimeoutMs = 15000;
+        const int RemoteStartupPollMs = 500;
+        const string SupportIssuesUrl = "https://github.com/focuxdot/CXX/issues";
 
         static readonly Font FontBase = new Font("Microsoft YaHei", 9f);
         static readonly Font FontTitle = new Font("Microsoft YaHei", 14, FontStyle.Bold);
@@ -397,6 +400,7 @@ namespace CXX
                 AddItem(m, I18n.L("扫码配对手机...", "Pair phone with QR..."), delegate { DoPair(); });
             }
             m.Items.Add(new ToolStripSeparator());
+            AddItem(m, I18n.L("反馈问题", "Report an issue"), delegate { DoReportIssue(); });
             AddItem(m, enabled ? I18n.L("退出托盘（远程继续运行）", "Quit tray (remote keeps running)") : I18n.L("退出托盘", "Quit tray"), delegate { DoQuit(); });
         }
 
@@ -420,16 +424,64 @@ namespace CXX
 
         void DoPair()
         {
-            if (!Backend.Bool(Backend.Call("status"), "enabled"))
+            var st = Backend.Call("status");
+            if (!Backend.Bool(st, "enabled") || !Backend.Bool(st, "running"))
             {
+                Cursor.Current = Cursors.WaitCursor;
                 var en = Backend.Call("enable");
-                if (Backend.HasKey(en, "error")) { Alert(I18n.L("开启失败", "Enable failed"), Backend.Str(en, "error")); return; }
-                RefreshIcon(Backend.Call("status"));
+                if (Backend.HasKey(en, "error"))
+                {
+                    Cursor.Current = Cursors.Default;
+                    Alert(I18n.L("开启失败", "Enable failed"), Backend.Str(en, "error"));
+                    return;
+                }
+                st = WaitForRemoteRunning(RemoteStartupTimeoutMs);
+                Cursor.Current = Cursors.Default;
+                RefreshIcon(st);
+                if (!Backend.Bool(st, "running"))
+                {
+                    Alert(
+                        I18n.L("后台启动失败", "Background service failed to start"),
+                        I18n.L(
+                            "CXX 已开启计划任务，但后台服务没有成功运行。请查看日志：",
+                            "CXX enabled the scheduled task, but the background service is not running. Check the log: "
+                        ) + DaemonLogPath() + "\n\n" +
+                        I18n.L(
+                            "如果仍然无法解决，请带上这份日志到 GitHub Issues 反馈：",
+                            "If this still does not work, include this log when reporting the issue on GitHub Issues: "
+                        ) + SupportIssuesUrl
+                    );
+                    return;
+                }
             }
             var res = Backend.Call("pair");
             string url = Backend.Str(res, "url");
             if (url == null) { Alert(I18n.L("配对失败", "Pairing failed"), Backend.Str(res, "error") ?? I18n.L("未知错误", "Unknown error")); return; }
             ShowQR(url, Backend.Str(res, "qrPath"));
+        }
+
+        Dictionary<string, object> WaitForRemoteRunning(int timeoutMs)
+        {
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            Dictionary<string, object> st = null;
+            while (DateTime.UtcNow < deadline)
+            {
+                st = Backend.Call("status");
+                if (Backend.Bool(st, "running")) return st;
+                Application.DoEvents();
+                Thread.Sleep(RemoteStartupPollMs);
+            }
+            return st ?? Backend.Call("status");
+        }
+
+        static string DaemonLogPath()
+        {
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".cxx",
+                "remote",
+                "daemon.log"
+            );
         }
 
         void DoDevices()
@@ -449,6 +501,18 @@ namespace CXX
             tray.Visible = false;
             tray.Dispose();
             ExitThread();
+        }
+
+        void DoReportIssue()
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo { FileName = SupportIssuesUrl, UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                Alert(I18n.L("无法打开链接", "Could not open link"), ex.Message + "\n\n" + SupportIssuesUrl);
+            }
         }
 
         void ShowQR(string url, string qrPath)

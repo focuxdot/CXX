@@ -7,6 +7,7 @@ import ServiceManagement
 // the daemon runs under launchd, so quitting the tray leaves remote running.
 // Window builders live in extensions (PairingWindow / DevicesWindow / NotifyWindow).
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    private static let supportIssuesURL = URL(string: "https://github.com/focuxdot/CXX/issues")!
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
     // Open windows are retained here (menu-bar apps have no window controller stack).
@@ -152,6 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(launch)
 
         menu.addItem(.separator())
+        add(menu, L("反馈问题", "Report an issue"), #selector(doReportIssue))
         add(menu, enabled ? L("退出托盘（远程继续运行）", "Quit tray (remote keeps running)") : L("退出托盘", "Quit tray"), #selector(doQuit))
     }
 
@@ -197,6 +199,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func doQuit() { NSApp.terminate(nil) }
+
+    @objc func doReportIssue() {
+        NSWorkspace.shared.open(Self.supportIssuesURL)
+    }
 
     @objc func toggleLaunchAtLogin() {
         Self.setLaunchAtLogin(!Self.launchAtLoginEnabled)

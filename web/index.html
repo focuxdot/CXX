@@ -155,17 +155,27 @@ try {
              background: var(--sunken); color: var(--text); font-size: 18px; line-height: 1;
              cursor: pointer; padding: 0; }
   #menubtn:active { background: var(--border); }
-  body.insession #menubtn, body:not(.paired) #menubtn { display: none; }
+  body:not(.paired) #menubtn { display: none; }
   /* ⋯ 菜单：组织方式 + 外观/字体/语言 + 管理 */
   #topmenu { display: none; position: fixed; right: 10px; top: 58px; z-index: 45;
              background: var(--raised); border: 1px solid var(--border); border-radius: 16px;
              padding: 6px; min-width: 230px; box-shadow: 0 10px 32px rgba(0,0,0,.35); }
   #topmenu.open { display: block; }
+  #topmenu .m-session, #topmenu .m-session-label, #topmenu .m-session-sep { display: none; }
+  body.insession #topmenu .m-list { display: none; }
+  body.insession:not(.viewer) #topmenu .m-session { display: flex; }
+  body.insession:not(.viewer) #topmenu .m-session-label,
+  body.insession:not(.viewer) #topmenu .m-session-sep { display: block; }
+  body.viewer #topmenu .m-session,
+  body.viewer #topmenu .m-session-label,
+  body.viewer #topmenu .m-session-sep { display: none !important; }
   #topmenu .mlabel { font-size: 12px; color: var(--dim); padding: 8px 14px 2px; }
   #topmenu button { display: flex; align-items: center; gap: 12px; width: 100%; border: none;
                     background: none; color: var(--text); font-size: 15px; padding: 12px 14px;
                     border-radius: 10px; cursor: pointer; text-align: left; }
   #topmenu button:active { background: var(--sunken); }
+  #topmenu button:disabled { opacity: .45; cursor: default; }
+  #topmenu button:disabled:active { background: none; }
   #topmenu button svg { flex: none; }
   #topmenu .mck { margin-left: auto; color: var(--accent); }
   #topmenu .mseg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px;
@@ -278,9 +288,11 @@ try {
   .pmeta { flex: none; color: var(--dim); font-size: 12px; }
   .proj.appr { background: var(--warn-bg); border-radius: 10px; padding-left: 8px; padding-right: 8px; }
   .proj.appr .pmeta { color: var(--warn); font-weight: 600; }
-  .pnew { margin-left: auto; flex: none; border: none; background: none; color: var(--text);
-          padding: 6px; cursor: pointer; line-height: 0; }
-  .pnew:active { opacity: .5; }
+  .pactions { margin-left: auto; flex: none; display: flex; align-items: center; gap: 2px; }
+  .pact { flex: none; border: none; background: none; color: var(--text);
+          padding: 6px; cursor: pointer; line-height: 0; border-radius: 8px; }
+  .pact:active { opacity: .5; background: var(--sunken); }
+  .parchive { color: var(--dim); }
   /* 「加载更多」行：可点，居中弱化 */
   .notice.loadmore { cursor: pointer; text-align: center; color: var(--accent); }
   .notice.loadmore:active { opacity: .5; }
@@ -550,6 +562,10 @@ try {
   .echoimgs { display: flex; gap: 6px; justify-content: flex-end; margin-bottom: 4px; }
   .echoimgs img { width: 72px; height: 72px; object-fit: cover; border-radius: 10px;
                   border: 1px solid var(--border); }
+  .userimgs { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; margin-bottom: 4px; }
+  .userimgs .imgbox { width: 72px; height: 72px; min-height: 0; margin: 0; padding: 0;
+                      display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .userimgs .imgbox img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
   .qtag { font-size: 11px; color: var(--dim); margin-top: 3px; }
   .msg.queued { opacity: .8; cursor: pointer; }
 
@@ -666,10 +682,13 @@ try {
   <button id="menubtn" data-i18n-aria="a11y.more" aria-label="更多选项">⋯</button>
 </header>
 <div id="topmenu">
-  <div class="mlabel m-full" data-i18n="menu.organize">组织方式</div>
-  <button data-act="proj" class="m-full"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span data-i18n="organize.proj">按项目</span><span class="mck" id="ckproj"></span></button>
-  <button data-act="time" class="m-full"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span data-i18n="organize.time">时间线</span><span class="mck" id="cktime"></span></button>
-  <hr class="m-full">
+  <div class="mlabel m-full m-list" data-i18n="menu.organize">组织方式</div>
+  <button data-act="proj" class="m-full m-list"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span data-i18n="organize.proj">按项目</span><span class="mck" id="ckproj"></span></button>
+  <button data-act="time" class="m-full m-list"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span data-i18n="organize.time">时间线</span><span class="mck" id="cktime"></span></button>
+  <hr class="m-full m-list">
+  <div class="mlabel m-session-label" data-i18n="menu.session">会话</div>
+  <button data-act="archive-session" class="m-session"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/></svg><span data-i18n="menu.archive_session">归档当前会话</span></button>
+  <hr class="m-session-sep">
   <div class="mlabel" data-i18n="menu.appearance">外观</div>
   <div class="mseg" role="group" data-i18n-aria="menu.appearance" aria-label="外观">
     <button data-act="th-light"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg><span data-i18n="theme.light">浅色</span><span class="mck" id="ckthlight"></span></button>
@@ -689,7 +708,7 @@ try {
   </div>
   <hr>
   <div class="mlabel" data-i18n="menu.manage">管理</div>
-  <button data-act="pc" class="m-full"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg><span data-i18n="menu.switchpc">切换电脑</span></button>
+  <button data-act="pc" class="m-full m-list"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg><span data-i18n="menu.switchpc">切换电脑</span></button>
   <button data-act="diag"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span data-i18n="menu.diag">连接状态</span></button>
 </div>
 <div id="sheet" class="sheet">
@@ -863,6 +882,8 @@ const I18N = {
     "menu.font": "字体",
     "menu.switchpc": "切换电脑",
     "menu.diag": "连接状态",
+    "menu.session": "会话",
+    "menu.archive_session": "归档当前会话",
     "organize.proj": "按项目",
     "organize.time": "时间线",
     "theme.auto": "跟随系统",
@@ -945,6 +966,7 @@ const I18N = {
     "sect.projects": "项目",
     "sect.chats": "对话",
     "proj.newin": "在 {0} 新建会话",
+    "proj.archive": "归档 {0}",
     "list.loadmore": "加载更多",
     "proj.badge.appr": (n) => `${n} 待审批`,
     "proj.badge.run": (n) => `${n} 运行中`,
@@ -964,6 +986,7 @@ const I18N = {
     "strip.codexWorking": "Codex 正在工作…",
     "echo.uploading": "上传图片 {0}/{1}…",
     "banner.offline_newsession": "电脑离线，暂时无法新建会话",
+    "banner.offline_archive": "电脑离线，暂时无法归档",
     "banner.offline_send": "电脑离线，暂时无法发送（输入内容已保留）",
     "banner.opensession_fail": "打开会话失败：{0}",
     "banner.attach_fail": "会话接入失败：{0}",
@@ -1088,6 +1111,12 @@ const I18N = {
     "toast.forked": "已创建分支",
     "banner.oldremote_fork": "电脑端 Remote 程序是旧版本，不支持打分支——在电脑上重启它即可",
     "banner.fork_fail": "打分支失败：{0}",
+    "confirm.archive_session": "归档当前会话？它会从列表中隐藏，可在 Codex 桌面端取消归档。",
+    "confirm.archive_project": "归档「{0}」下的所有会话？它们会从列表中隐藏。",
+    "toast.archived": "已归档",
+    "toast.project_archived": "已归档 {0} 个会话",
+    "banner.oldremote_archive": "电脑端 Remote 程序是旧版本，不支持归档——在电脑上重启它即可",
+    "banner.archive_fail": "归档失败：{0}",
     "fork.confirm.title": "从这条消息创建分支？",
     "fork.confirm.body": "这会保持你当前的文件和工作树状态不变。如果后续轮次更改了文件系统，新的分支内容可能与当前磁盘上的内容不一致。",
     "fork.local.title": "派生到本地",
@@ -1148,6 +1177,8 @@ const I18N = {
     "menu.font": "Font size",
     "menu.switchpc": "Switch computer",
     "menu.diag": "Connection",
+    "menu.session": "Session",
+    "menu.archive_session": "Archive current session",
     "organize.proj": "Project",
     "organize.time": "Timeline",
     "theme.auto": "System",
@@ -1230,6 +1261,7 @@ const I18N = {
     "sect.projects": "Projects",
     "sect.chats": "Chats",
     "proj.newin": "New session in {0}",
+    "proj.archive": "Archive {0}",
     "list.loadmore": "Load more",
     "proj.badge.appr": (n) => `${n} pending`,
     "proj.badge.run": (n) => `${n} running`,
@@ -1249,6 +1281,7 @@ const I18N = {
     "strip.codexWorking": "Codex is working…",
     "echo.uploading": "Uploading image {0}/{1}…",
     "banner.offline_newsession": "Computer offline — can't start a new session right now",
+    "banner.offline_archive": "Computer offline — can't archive right now",
     "banner.offline_send": "Computer offline — can't send right now (your text is kept)",
     "banner.opensession_fail": "Couldn't open session: {0}",
     "banner.attach_fail": "Couldn't attach to session: {0}",
@@ -1373,6 +1406,12 @@ const I18N = {
     "toast.forked": "Fork created",
     "banner.oldremote_fork": "The computer's Remote is an old version that doesn't support forking — restart it on the computer",
     "banner.fork_fail": "Couldn't fork session: {0}",
+    "confirm.archive_session": "Archive the current session? It will be hidden from the list and can be unarchived from Codex on the computer.",
+    "confirm.archive_project": "Archive every session under “{0}”? They will be hidden from the list.",
+    "toast.archived": "Archived",
+    "toast.project_archived": (n) => `Archived ${n} session${n == 1 ? "" : "s"}`,
+    "banner.oldremote_archive": "The computer's Remote is too old to archive sessions — restart it on the computer",
+    "banner.archive_fail": "Couldn't archive: {0}",
     "fork.confirm.title": "Fork from this message?",
     "fork.confirm.body": "This keeps your current files and worktree state as-is. If later turns changed the filesystem, the new fork may not match what is currently on disk.",
     "fork.local.title": "Fork locally",
@@ -1674,7 +1713,8 @@ const AGENT_UI_READY = new Set(["codex", "claude"]);
 // 需按当前 agent 路由到对应后端/hub 的方法（其余走全局：auth/agents.list/share.revoke 等）
 const AGENT_ROUTED = new Set([
   "sessions.list", "projects.list", "session.watch", "session.unwatch", "session.more",
-  "session.send", "session.new", "session.start", "session.fork", "turn.interrupt", "approval.respond",
+  "session.send", "session.new", "session.start", "session.fork", "session.archive", "session.unarchive",
+  "project.archive", "turn.interrupt", "approval.respond",
   "models.list", "goal.get", "goal.set", "image.fetch", "image.push",
   "share.create", "share.list", "share.react",
 ]);
@@ -2076,7 +2116,7 @@ function extractText(value, depth = 0) {
 // 对话正文认 event_msg（user_message/agent_message）；工具调用认 response_item
 // （function_call + function_call_output 以 call_id 配对，这是现行 codex 记录命令
 // 的唯一位置——event_msg 早已不含 exec_command_*，但保留旧格式兼容）。
-// 返回值：null | {cls:"user"|"assistant", text}
+// 返回值：null | {cls:"user"|"assistant", text, refs?}
 //        | {cls:"tool", icon, label, detail, callId}   工具调用折叠行
 //        | {cls:"toolout", callId, text, code}          工具输出（并入对应折叠行）
 //        | {cls:"diff", files:[{path,kind,diff}], ok}   文件改动
@@ -2161,7 +2201,13 @@ function itemToBubble(item) {
     if (pt === "message" && Array.isArray(p.content)) {
       // 文本部分与 event_msg 重复（跳过），但用户贴的图只存在于这里
       const refs = p.content.map((c) => c?.imageRef).filter(Boolean);
-      if (refs.length) return { cls: "images", refs, user: p.role === "user" };
+      if (refs.length) {
+        if (p.role === "user") {
+          const texts = p.content.map((c) => String(c?.text ?? c?.input_text ?? "").trim()).filter(Boolean);
+          return { cls: "user", text: texts.join("\n\n"), refs };
+        }
+        return { cls: "images", refs, user: false };
+      }
       return null;
     }
     if (pt === "function_call") {
@@ -2610,14 +2656,35 @@ function markAssistantFinal(msg) {
   return msg;
 }
 
-function bubbleNode({ cls, text, directives = [] }) {
+function bubbleNode({ cls, text = "", directives = [], refs = [] }) {
   const msg = document.createElement("div");
   msg.className = `msg ${cls}`;
   if (cls === "user") {
-    const b = document.createElement("div");
-    b.className = "bubble";
-    b.textContent = clip(text);
-    msg.appendChild(b);
+    const addText = (parent) => {
+      if (!text) return;
+      const b = document.createElement("div");
+      b.className = "bubble";
+      b.textContent = clip(text);
+      parent.appendChild(b);
+    };
+    if (refs.length) {
+      const col = document.createElement("div");
+      col.className = "echocol";
+      const row = document.createElement("div");
+      row.className = "userimgs";
+      for (const ref of refs) {
+        const box = document.createElement("div");
+        box.className = "imgbox";
+        if (ref.tooLarge || !ref.id) box.textContent = t("img.toolargeview");
+        else loadImage(ref, box);
+        row.appendChild(box);
+      }
+      col.appendChild(row);
+      addText(col);
+      msg.appendChild(col);
+    } else {
+      addText(msg);
+    }
   } else {
     msg.appendChild(mdRender(clip(text)));
     // 超长回复不再一刀切：点开看全部
@@ -2684,6 +2751,7 @@ const app = {
   earlierAnchor: null,     // 加载前滚动位置 {scrollY}，加载完成后恢复，避免跳到最新消息
   approvals: new Map(),    // approvalKey -> 请求参数（全局待审批注册表）
   echoes: [],              // 乐观渲染的用户气泡 {text, imgs, el}，等 tail 确认后移除
+  suppressUserImages: 0,   // 带图文字 echo 被文本确认后，吞掉随后单独到达的用户图片块
   attachments: [],         // 待发送的图片 {b64, mime}（最多 4 张）
   queue: [],               // 运行中排队的消息 {text, atts, el}，本轮结束后逐条发出
   turnOpts: null,          // 按轮 override：{perm, model, modelName, effort}（localStorage 持久化）
@@ -2718,6 +2786,7 @@ const app = {
   replayDone: false,       // 回放已读到末条
   replayLoading: false,
   replayLastAt: 0,         // 客户端自限 ≥2s，与 daemon 的 viewer 频控对齐
+  archivingSessionId: null, // 本机发起归档时抑制 board.changed 触发的二次返回
 };
 
 function showBanner(text, onTap) {
@@ -3054,6 +3123,7 @@ function loadMoreRow(fn) {
 // 按项目（cwd）分组：组头可折叠、右侧图标在该项目下直接开新会话
 const FOLDER_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 const COMPOSE_SVG = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M18.4 2.6a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>';
+const ARCHIVE_SVG = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/></svg>';
 
 // 折叠态只存在于本次会话内存里，不持久化：每次加载首页所有项目/「对话」段一律折叠
 // （对标 Codex 的干净默认）。展开/收起在浏览期间照常生效，刷新后回到全折叠。
@@ -3157,6 +3227,11 @@ function updateLangChecks() {
   setMenuOption("lang-en", LANG === "en", "cklangen");
 }
 
+function updateMenuState() {
+  const archive = document.querySelector('#topmenu button[data-act="archive-session"]');
+  if (archive) archive.disabled = app.view !== "session" || isDraftSession() || app.isViewer;
+}
+
 // 归一路径分隔符为 /、去尾分隔符，让同一套规则同时匹配 Windows(\) 与 POSIX(/)。
 function normSep(cwd) {
   return (cwd || "").trim().replace(/[\\/]+$/, "").replace(/\\/g, "/");
@@ -3214,8 +3289,10 @@ function renderProjects(list, attnIds, q) {
     chev.textContent = "›"; // 统一角括号；展开态旋转 90°（取代 ▸/▾ 双字形）
     chev.style.transform = closed ? "" : "rotate(90deg)";
     head.append(name, meta, chev);
+    const actions = document.createElement("span");
+    actions.className = "pactions";
     const add = document.createElement("button");
-    add.className = "pnew";
+    add.className = "pact pnew";
     add.innerHTML = COMPOSE_SVG;
     add.setAttribute("aria-label", t("proj.newin", name.textContent));
     add.onclick = (e) => {
@@ -3223,7 +3300,16 @@ function renderProjects(list, attnIds, q) {
       if (net.link !== "ok" || net.daemon === false) { showBanner(t("banner.offline_newsession")); return; }
       openDraftSession(p.cwd);
     };
-    head.appendChild(add);
+    const archive = document.createElement("button");
+    archive.className = "pact parchive";
+    archive.innerHTML = ARCHIVE_SVG;
+    archive.setAttribute("aria-label", t("proj.archive", name.textContent));
+    archive.onclick = (e) => {
+      e.stopPropagation();
+      archiveProject(p.cwd, name.textContent);
+    };
+    actions.append(add, archive);
+    head.appendChild(actions);
     head.onclick = () => toggleProject(norm, p.cwd);
     list.appendChild(head);
     if (!closed) {
@@ -3437,6 +3523,61 @@ function removeSessionFromLists(id) {
   app.lastSessions = [...app.knownById.values()];
 }
 
+function removeSessionsForCwd(cwd) {
+  const norm = normSep(cwd);
+  if (!norm) return;
+  for (const [id, s] of [...app.knownById.entries()]) {
+    if (normSep(s.cwd) === norm) app.knownById.delete(id);
+  }
+  app.headSessions = app.headSessions.filter((s) => normSep(s.cwd) !== norm);
+  app.timeline.sessions = app.timeline.sessions.filter((s) => normSep(s.cwd) !== norm);
+  app.projects = app.projects.filter((p) => normSep(p.cwd) !== norm);
+  app.projByCwd.delete(norm);
+  app.projSessions.delete(norm);
+  app.expanded.delete(norm);
+  app.lastSessions = [...app.knownById.values()];
+}
+
+async function archiveCurrentSession() {
+  if (!app.currentId || isDraftSession() || app.isViewer) return;
+  if (net.link !== "ok" || net.daemon === false) { showBanner(t("banner.offline_archive")); return; }
+  if (!confirm(t("confirm.archive_session"))) return;
+  $("topmenu").classList.remove("open");
+  const id = app.currentId;
+  app.archivingSessionId = id;
+  try {
+    await app.session.request("session.archive", { sessionId: id }, 90000);
+    removeSessionFromLists(id);
+    transcriptCache.delete(transcriptKey(id));
+    showToast(t("toast.archived"));
+    scheduleListRefresh();
+    if (app.view === "session" && app.currentId === id) history.back();
+  } catch (err) {
+    showBanner(isUnknownMethodError(err, "session.archive")
+      ? t("banner.oldremote_archive")
+      : t("banner.archive_fail", err.message));
+  } finally {
+    if (app.archivingSessionId === id) app.archivingSessionId = null;
+  }
+}
+
+async function archiveProject(cwd, name) {
+  if (!cwd || app.isViewer) return;
+  if (net.link !== "ok" || net.daemon === false) { showBanner(t("banner.offline_archive")); return; }
+  if (!confirm(t("confirm.archive_project", name || cwd))) return;
+  try {
+    const res = await app.session.request("project.archive", { cwd }, 120000);
+    removeSessionsForCwd(cwd);
+    showToast(t("toast.project_archived", res?.archived ?? 0));
+    renderList();
+    scheduleListRefresh();
+  } catch (err) {
+    showBanner(isUnknownMethodError(err, "project.archive")
+      ? t("banner.oldremote_archive")
+      : t("banner.archive_fail", err.message));
+  }
+}
+
 function isUnknownMethodErr(e) {
   return e?.code === 400 && /未知方法|unknown method/i.test(String(e?.message || ""));
 }
@@ -3444,20 +3585,67 @@ function isUnknownMethodErr(e) {
 // ===== Agent 切换器：列出 daemon 可用后端 + 运行时切换（切换后按新 agent 重取首页）=====
 // 老 daemon 无 agents.list → 静默回落仅 codex；只有一个后端时切换器隐藏（无从切换）。
 async function loadAgents() {
+  const daemonId = app.session?.info?.id;
   try {
     const res = await app.session.request("agents.list", {});
     const raw = Array.isArray(res?.agents) ? res.agents : (Array.isArray(res) ? res : []);
     // 只暴露前端有渲染路径的后端（见 AGENT_UI_READY）：codex 始终在 daemon 注册，故至少留 codex
-    const list = raw.filter((a) => AGENT_UI_READY.has(a.id || a.agent));
+    const list = cleanAgentList(raw);
     app.agents = list;
     // 当前 agent 不在可用列表（如 daemon 未起 claude）→ 回落到第一个可用
-    if (list.length && !list.some((a) => (a.id || a.agent) === app.agent)) {
-      app.agent = list[0].id || list[0].agent || "codex";
+    if (list.length && !list.some((a) => a.id === app.agent)) app.agent = list[0].id || "codex";
+    saveAgentSnapshot(daemonId);
+  } catch (err) {
+    // 老 daemon 无 agents.list：静默，仅 codex；瞬时断线/超时则保留本地快照，避免按钮闪没。
+    if (isUnknownMethodErr(err)) {
+      app.agents = [];
+      try { if (daemonId) localStorage.removeItem(agentSnapKey(daemonId)); } catch {}
+    } else if (!app.agents.length) {
+      app.agents = [];
     }
-  } catch {
-    app.agents = []; // 老 daemon 无 agents.list：静默，仅 codex
   }
   renderAgentPick();
+}
+
+function agentSnapKey(daemonId) {
+  return `czr-agents:${daemonId}`;
+}
+
+function cleanAgentList(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((a) => {
+      const id = a?.id || a?.agent;
+      if (!AGENT_UI_READY.has(id)) return null;
+      return { id, name: a.name || agentLabel(id), healthy: a.healthy !== false };
+    })
+    .filter(Boolean);
+}
+
+function applyAgentList(list) {
+  app.agents = cleanAgentList(list);
+  if (app.agents.length && !app.agents.some((a) => a.id === app.agent)) app.agent = app.agents[0].id || "codex";
+  renderAgentPick();
+}
+
+function saveAgentSnapshot(daemonId) {
+  if (!daemonId || app.isViewer) return;
+  try {
+    localStorage.setItem(agentSnapKey(daemonId), JSON.stringify({ v: 1, agents: cleanAgentList(app.agents) }));
+  } catch {}
+}
+
+function hydrateAgentSnapshot(daemonId) {
+  if (app.isViewer || !daemonId) return;
+  let snap = null;
+  try { snap = JSON.parse(localStorage.getItem(agentSnapKey(daemonId)) || "null"); } catch {}
+  if (snap?.v === 1 && Array.isArray(snap.agents)) {
+    applyAgentList(snap.agents);
+  } else {
+    app.agent = "codex";
+    app.agents = [];
+    renderAgentPick();
+  }
 }
 
 function agentLabel(id) {
@@ -3614,6 +3802,7 @@ function dropBoardSnapshots(daemonId) {
       const k = localStorage.key(i);
       if (k && k.startsWith(`czr-board:${daemonId}:`)) localStorage.removeItem(k);
     }
+    localStorage.removeItem(agentSnapKey(daemonId));
   } catch {}
 }
 // 清空首页列表数据模型。切电脑/切 agent 共用：两者的会话 id 与项目空间都彼此独立
@@ -3898,6 +4087,7 @@ async function openSession(id, title, opts = {}) {
   $("input").value = app.drafts.get(id) ?? ""; // 恢复本会话的未发送草稿
   app.attachments = [];
   app.queue = [];
+  app.suppressUserImages = 0;
   renderAttachments();
   setPlanMode(false); // 计划模式是会话级选择，不跨会话
   autoGrow();
@@ -3982,6 +4172,7 @@ async function closeSession() {
   if (wasDraft) app.draft = null;
   app.pendingWatch = false;
   app.echoes = [];
+  app.suppressUserImages = 0;
   app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; clearTimeout(app.claudeIdle); app.claudeIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
   app.stream = null;
   app.proc = null;
@@ -4132,10 +4323,11 @@ function addEcho(text, atts = []) {
 
 function consumeEcho(text) {
   const idx = app.echoes.findIndex((e) => e.text.trim() === text.trim());
-  if (idx === -1) return false;
-  app.echoes[idx].el.remove();
+  if (idx === -1) return null;
+  const echo = app.echoes[idx];
+  echo.el.remove();
   app.echoes.splice(idx, 1);
-  return true;
+  return echo;
 }
 
 // 纯图片消息没有文本可匹配：tail 的用户图片气泡到达时，摘掉最早的图片乐观气泡
@@ -5359,6 +5551,20 @@ function claudeItemToBubbles(item) {
     return out;
   }
   if (!Array.isArray(content)) return out;
+  if (asRole === "user" && !content.some((b) => b?.type === "tool_result")) {
+    const refs = [];
+    const texts = [];
+    for (const b of content) {
+      if (b?.type === "text") {
+        const raw = String(b.text ?? "").trim();
+        if (raw) texts.push(raw);
+      } else if (b?.type === "image" && b.imageRef) {
+        refs.push(b.imageRef);
+      }
+    }
+    if (texts.length || refs.length) out.push({ cls: "user", text: texts.join("\n\n"), refs });
+    return out;
+  }
   for (const b of content) {
     const bt = b?.type;
     if (bt === "text") {
@@ -5599,6 +5805,8 @@ function renderInto(items, live = false) {
   // Codex 运行中按原顺序平铺过程节点；task_complete 时再创建过程组并收拢中间内容。
   // Claude 全程内联，仍由 end_turn 钉每轮总结。
   let lastAssistantNode = null;
+  let pendingUserBubble = null;
+  let pendingUserSource = null;
   const trackProcNode = (node, kind, sourceItem, countStep = false) => {
     if (inline || !node) return;
     if (!app.proc) procStart(null);
@@ -5614,18 +5822,36 @@ function renderInto(items, live = false) {
     if (toProc) ensureProc(frag).body.appendChild(node);
     else frag.appendChild(node);
   };
+  const mergeUserBubbles = (a, b) => {
+    const refs = [...(a.refs || []), ...(b.refs || [])];
+    const texts = [a.text, b.text].map((s) => String(s || "").trim()).filter(Boolean);
+    const text = texts.length > 1 && texts[0] !== texts[1] ? texts.join("\n\n") : (texts[0] || "");
+    return { cls: "user", text, refs };
+  };
+  const shouldMergeUserBubbles = (a, b) => {
+    if (!a || !b || a.cls !== "user" || b.cls !== "user") return false;
+    if (!((a.refs || []).length || (b.refs || []).length)) return false;
+    const at = String(a.text || "").trim();
+    const bt = String(b.text || "").trim();
+    return !at || !bt || at === bt;
+  };
   // 单条气泡 → 节点（codex 与 Claude 共用；Claude 一条消息含多块，逐块调用）。
   // Claude 全程内联（对标终端 scrollback）；Codex 运行中也平铺显示，完成后统一折叠中间过程。
   const inline = app.agent === "claude";
-  const emitBubble = (bubble, sourceItem) => {
+  const emitBubbleNow = (bubble, sourceItem) => {
     if (!bubble) return;
     let node = null;
     let toProc = false;
     if (bubble.cls === "user") {
+      if ((bubble.refs || []).length && !String(bubble.text || "").trim() && app.suppressUserImages > 0) {
+        app.suppressUserImages--;
+        return;
+      }
       // 只收"已有内容"的组（旧格式无轮次事件时靠这里收拢上一轮）；
       // 本轮 task_started 刚记下的未挂载组要留着——它属于这条用户消息开启的轮次
       if (app.proc?.wrap || app.proc?.nodes?.length) procFinish(sourceItem);
-      consumeEcho(bubble.text); // tail 确认，撤下乐观气泡
+      const echoed = consumeEcho(bubble.text); // tail 确认，撤下乐观气泡
+      if (echoed?.imgs && !(bubble.refs || []).length) app.suppressUserImages++;
       node = bubbleNode(bubble);
     } else if (bubble.cls === "assistant") {
       endStream(); // tail 的完整消息到了，撤下流式草稿
@@ -5654,6 +5880,30 @@ function renderInto(items, live = false) {
       node = imagesNode(bubble); // 生成图是结果产物，留在组外常显
     }
     if (node) sink(node, toProc);
+  };
+  const flushPendingUser = () => {
+    if (!pendingUserBubble) return;
+    const bubble = pendingUserBubble;
+    const sourceItem = pendingUserSource;
+    pendingUserBubble = null;
+    pendingUserSource = null;
+    emitBubbleNow(bubble, sourceItem);
+  };
+  const emitBubble = (bubble, sourceItem) => {
+    if (!bubble) return;
+    if (bubble.cls === "user") {
+      if (shouldMergeUserBubbles(pendingUserBubble, bubble)) {
+        pendingUserBubble = mergeUserBubbles(pendingUserBubble, bubble);
+        if (String(bubble.text || "").trim()) pendingUserSource = sourceItem;
+      } else {
+        flushPendingUser();
+        pendingUserBubble = bubble;
+        pendingUserSource = sourceItem;
+      }
+      return;
+    }
+    flushPendingUser();
+    emitBubbleNow(bubble, sourceItem);
   };
   for (const item of items) {
     observePermissionItem(item);
@@ -5693,6 +5943,7 @@ function renderInto(items, live = false) {
     trackCodexActivity(item);
     emitBubble(itemToBubble(item), item);
   }
+  flushPendingUser();
   // 桌面驱动 Claude：本批含 end_turn（本轮最终回复）→ 收尾运行态，等价 daemon 的 turn/completed。
   // 先记住"本批收了尾"（setRunning 会把 driver 置空），总结行留到 frag 落地、活动行撤下后再钉到底部。
   // 桌面驱动 Claude：本批含 end_turn → 收尾运行态（等价 daemon 的 turn/completed）。总结行已在上面
@@ -6089,6 +6340,9 @@ function handleNotify(msg) {
     if (bp.archived === true) {
       removeSessionFromLists(bp.sessionId);
       scheduleListRefresh(); // 项目计数/最新会话等聚合信息后台对齐
+      if (bp.sessionId === app.currentId && app.view === "session" && !app.isViewer && app.archivingSessionId !== bp.sessionId) {
+        history.back();
+      }
       if (app.view === "list") renderList();
       return;
     }
@@ -6334,6 +6588,7 @@ function startSession(info) {
   app.modelState = null;
   if (!app.isViewer) {
     resetListModel();              // 换绑电脑：上一台的列表数据不跨 daemon
+    hydrateAgentSnapshot(info.id); // 先渲染上次可用 agent（秒出切换器），联上后 agents.list 覆盖
     hydrateBoardSnapshot(info.id); // 先渲染上次快照（秒开），联上后 refreshList 全量覆盖
   }
   session.onStatus = (patch) => {
@@ -6385,8 +6640,8 @@ function startSession(info) {
       }
       return;
     }
+    loadAgents();     // 优先填充 agent 切换器（失败静默，仅 codex；<2 后端时隐藏）
     prefetchModels(); // 静默：给模型胶囊补上电脑端默认模型号
-    loadAgents();     // 填充 agent 切换器（失败静默，仅 codex；<2 后端时隐藏）
     try {
       if (app.view === "session" && app.currentId && !isDraftSession()) {
         // 重连后恢复当前会话的实时订阅。带 have 游标：命中则 daemon 只补断线期间的
@@ -6744,6 +6999,7 @@ async function main() {
     updateThemeChecks();
     updateFontChecks();
     updateLangChecks();
+    updateMenuState();
     $("agentpick").classList.remove("open");
     $("topmenu").classList.toggle("open");
   };
@@ -6763,6 +7019,8 @@ async function main() {
       updateFontChecks();
     } else if (act === "lang-zh" || act === "lang-en") {
       applyLang(act.slice(5));
+    } else if (act === "archive-session") {
+      archiveCurrentSession();
     } else if (act === "pc") {
       $("topmenu").classList.remove("open");
       openSheet();

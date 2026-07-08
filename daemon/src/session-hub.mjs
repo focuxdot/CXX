@@ -395,6 +395,23 @@ export class SessionHub {
     return { threadId: forkedId, cwd: result?.cwd ?? forked.cwd ?? "" };
   }
 
+  async archiveThread(threadId) {
+    if (!threadId) throw new Error("缺少 sessionId");
+    const result = await this.#appServer.archiveThread(threadId);
+    this.#resumed.delete(threadId);
+    this.#appServer.invalidateProjects?.();
+    this.#broadcastBoard(threadId, { archived: true });
+    return result ?? { ok: true };
+  }
+
+  async unarchiveThread(threadId) {
+    if (!threadId) throw new Error("缺少 sessionId");
+    const result = await this.#appServer.unarchiveThread(threadId);
+    this.#appServer.invalidateProjects?.();
+    this.#broadcastBoard(threadId, { archived: false });
+    return result ?? { ok: true };
+  }
+
   async #ensureResumed(threadId) {
     if (this.#resumed.has(threadId)) return;
     await this.#appServer.resumeThread(threadId);
@@ -420,6 +437,10 @@ export class SessionHub {
   #onNotification(method, params) {
     const threadId = params?.threadId;
     if (!threadId) return;
+    if (method === "thread/archived" || method === "thread/unarchived") {
+      this.#appServer.invalidateProjects?.();
+      this.#broadcastBoard(threadId, { archived: method === "thread/archived" });
+    }
     if (method === "turn/started") {
       const turnId = params?.turn?.id ?? params?.turnId;
       if (turnId) this.#currentTurn.set(threadId, turnId);
@@ -486,11 +507,12 @@ export class SessionHub {
 
   // 看板变更（运行状态/审批数变化），客户端据此刷新列表徽标。
   // 不发观众：它携带其他会话的运行状态与审批数（观众端也无看板）。
-  #broadcastBoard(threadId) {
+  #broadcastBoard(threadId, extra = {}) {
     const payload = {
       sessionId: threadId,
       running: this.isRunning(threadId),
       approvals: this.approvalCount(threadId),
+      ...extra,
     };
     for (const client of this.#clients) {
       if (client.isViewer) continue;

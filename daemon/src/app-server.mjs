@@ -2,6 +2,7 @@
 import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 
+import { codexInvocation } from "./codex-path.mjs";
 import { CachedProjects } from "./project-index.mjs";
 
 export class AppServer {
@@ -41,10 +42,19 @@ export class AppServer {
   }
 
   async #spawnAndConnect() {
-    this.#child = spawn(this.#command, ["app-server", "--listen", this.url], {
+    const invocation = codexInvocation(this.#command, ["app-server", "--listen", this.url]);
+    this.#child = spawn(invocation.command, invocation.args, {
       stdio: ["ignore", "ignore", "pipe"],
+      windowsHide: true,
     });
-    this.#child.stderr.on("data", (chunk) => this.#log(`[app-server] ${chunk}`.trimEnd()));
+    const spawnError = new Promise((resolve) => {
+      this.#child.once("error", (err) => {
+        this.#log(`app-server 启动进程失败: ${err.message}`);
+        this.onStateChange(false);
+        resolve(err);
+      });
+    });
+    this.#child.stderr?.on("data", (chunk) => this.#log(`[app-server] ${chunk}`.trimEnd()));
     this.#child.on("exit", (code) => {
       this.#log(`app-server 退出（code=${code}）`);
       this.#ws = null;
@@ -55,7 +65,8 @@ export class AppServer {
       }
     });
 
-    await this.#waitReady();
+    const err = await Promise.race([this.#waitReady().then(() => null), spawnError]);
+    if (err) throw err;
     await this.#connect();
   }
 
@@ -177,6 +188,7 @@ export class AppServer {
       updatedAt: t.updatedAt ?? null,
       source: t.source ?? "",
       status: t.status?.type ?? "unknown",
+      archived: Boolean(t.archived ?? t.archivedAt ?? t.archived_at),
       path: t.path ?? null,
     };
   }
@@ -195,7 +207,7 @@ export class AppServer {
     // 引擎单页上限 100，故内部最多翻 ceil(target/100) 页才能凑够 target（+1 容错）
     const maxPages = Math.ceil(target / 100) + 1;
     for (let i = 0; i < maxPages && items.length < target; i++) {
-      const params = { limit: 100 }; // 引擎单页上限
+      const params = { limit: 100, archived: false }; // 引擎单页上限；手机端只展示未归档会话
       if (cur) params.cursor = cur;
       if (cwd) params.cwd = cwd;
       const result = await this.request("thread/list", params);
@@ -230,6 +242,18 @@ export class AppServer {
     }
   }
 
+  async archiveThread(threadId) {
+    await this.request("thread/archive", { threadId }, this.#SESSION_TIMEOUT);
+    this.invalidateProjects();
+    return { ok: true };
+  }
+
+  async unarchiveThread(threadId) {
+    await this.request("thread/unarchive", { threadId }, this.#SESSION_TIMEOUT);
+    this.invalidateProjects();
+    return { ok: true };
+  }
+
   // 跨页累计到 limit（daemon 内部用：昵称缓存等）。会去重、按更新时间新→旧排序。
   // 注意：结果体量可能很大，切勿整份塞进单个 E2E 帧发给客户端（用 listThreadsPage）。
   async listThreads(limit = 1000) {
@@ -238,7 +262,7 @@ export class AppServer {
     const items = [];
     let cursor = null;
     for (let guard = 0; guard < 60 && items.length < target; guard++) {
-      const params = { limit: pageSize };
+      const params = { limit: pageSize, archived: false };
       if (cursor) params.cursor = cursor;
       const result = await this.request("thread/list", params);
       const batch = result?.data ?? [];
