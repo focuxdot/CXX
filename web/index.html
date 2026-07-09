@@ -305,6 +305,7 @@ try {
   .row.appr { border-color: var(--warn-border); background: var(--warn-bg); }
   .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--border); }
   .dot.run { background: var(--ok); animation: pulse 1.2s ease-in-out infinite; }
+  .dot.act { background: var(--ok); opacity: .45; } /* 桌面活动：只表示文件近期有写入，弱化且不脉冲 */
   .dot.appr { background: var(--warn); }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
   .rowmain { flex: 1; min-width: 0; }
@@ -313,6 +314,7 @@ try {
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .rowsub .st { font-weight: 600; }
   .rowsub .st.run { color: var(--ok); }
+  .rowsub .st.act { color: var(--ok); opacity: .65; }
   .rowsub .st.appr { color: var(--warn); }
   /* 按项目分组（cwd 聚合）：项目头行可折叠，右侧只保留高频的新建会话 */
   .proj { display: flex; align-items: center; gap: 10px; padding: 12px 4px; cursor: pointer;
@@ -1043,10 +1045,13 @@ const I18N = {
     "session.fallback": "会话",
     "row.waiting": "等待审批",
     "row.running": "运行中",
+    "row.active": "桌面活动",
     "row.lastviewed": "上次查看 · ",
     "home.approvalsN": "{0} 个会话在等你审批",
     "home.alsoRunningN": "另有 {0} 个任务在运行",
     "home.runningN": "{0} 个任务正在运行",
+    "home.activeN": "{0} 个会话在桌面上活动",
+    "home.alsoActiveN": "另有 {0} 个会话在桌面上活动",
     "sect.active": "进行中",
     "sect.recent": "最近",
     "list.nomatch": "没有匹配的会话",
@@ -1348,10 +1353,13 @@ const I18N = {
     "session.fallback": "Session",
     "row.waiting": "Waiting for approval",
     "row.running": "Running",
+    "row.active": "Active on desktop",
     "row.lastviewed": "Last viewed · ",
     "home.approvalsN": (n) => `${n} session${n == 1 ? "" : "s"} waiting for approval`,
     "home.alsoRunningN": (n) => `${n} more task${n == 1 ? "" : "s"} running`,
     "home.runningN": (n) => `${n} task${n == 1 ? "" : "s"} running`,
+    "home.activeN": (n) => `${n} session${n == 1 ? "" : "s"} active on desktop`,
+    "home.alsoActiveN": (n) => `${n} more session${n == 1 ? "" : "s"} active on desktop`,
     "sect.active": "Active",
     "sect.recent": "Recent",
     "list.nomatch": "No matching sessions",
@@ -2840,7 +2848,7 @@ const app = {
   actVerb: "",         // 活动行当前动词（随最新块动态：思考/执行命令/编辑…）
   turnStartTs: 0,      // 本轮真实起点=最近一条非 tool_result 用户消息时间戳（耗时锚，跨空闲不漂）
   turnSummarized: false, // 本轮是否已钉"已处理 Xs"总结行（rising edge 重置）
-  claudeIdle: null,    // 桌面驱动 Claude 会话的运行态空闲兜底定时器
+  desktopIdle: null,   // 桌面驱动会话的运行态空闲兜底定时器（Codex/Claude 通用，见 desktopIdleArm）
   todoNode: null,      // 流末尾计划清单 DOM（TodoWrite/Task* 就地更新）
   todoCalls: new Set(), // TodoWrite/TaskCreate/TaskUpdate 的 tool_use id 集合（吞掉工具卡与回执噪音）
   pendingTodos: null,  // 待渲染的最新 todos（trackClaudeActivity 抽出，renderInto 末尾落地）
@@ -3018,7 +3026,7 @@ function updateStatusPill() {
   // 离线时禁用发送并在占位符里说明，而不是发送后才报错
   const offline = net.link !== "ok" || net.daemon === false;
   $("send").disabled = offline;
-  $("input").placeholder = offline ? t("input.offline") : t("input.ph");
+  $("input").placeholder = offline ? t("input.offline") : inputPh();
   if ($("diagsheet").classList.contains("open")) renderDiag();
 }
 
@@ -3152,11 +3160,13 @@ function openDiag() {
 
 // —— 列表页：状态看板 ——
 function sessionRow(s, inproj = false) {
-  const busy = s.running || s.active;
+  // running（daemon 正在驱动，权威）与 active（文件近期有写入的启发式）分开呈现：
+  // 前者是"运行中"+脉冲，后者是弱化的"桌面活动"——别把刚写过文件的会话谎报成在跑
+  const act = !s.running && activeFresh(s);
   const row = document.createElement("div");
   row.className = `row${s.approvals ? " appr" : ""}${inproj ? " inproj" : ""}`;
   const dot = document.createElement("span");
-  dot.className = `dot${s.approvals ? " appr" : busy ? " run" : ""}`;
+  dot.className = `dot${s.approvals ? " appr" : s.running ? " run" : act ? " act" : ""}`;
   const main = document.createElement("div");
   main.className = "rowmain";
   const title = document.createElement("div");
@@ -3172,10 +3182,15 @@ function sessionRow(s, inproj = false) {
     st.className = "st appr";
     st.textContent = t("row.waiting");
     sub.appendChild(st);
-  } else if (busy) {
+  } else if (s.running) {
     const st = document.createElement("span");
     st.className = "st run";
     st.textContent = t("row.running");
+    sub.appendChild(st);
+  } else if (act) {
+    const st = document.createElement("span");
+    st.className = "st act";
+    st.textContent = t("row.active");
     sub.appendChild(st);
   }
   // 项目分组里目录是组头信息，行内不再重复；托管的每聊天目录名（new-chat-7…）无意义也不显示。
@@ -3203,28 +3218,37 @@ function renderList() {
   const list = $("list");
   list.innerHTML = "";
 
-  // 需要注意的事：审批 / 运行 / 活跃。daemon 的 projects.list 保证运行/待审批的会话一定
-  // 进了 knownById（attention 数组），故这里从 knownById 全量挑即完整，跨来源稳健。
-  const attention = [...app.knownById.values()].filter((s) => s.approvals || s.running || s.active);
+  // 需要注意的事：审批 / 运行 / 活跃（activeFresh 本地衰减，过期不再算）。daemon 的
+  // projects.list 保证运行/待审批的会话一定进了 knownById（attention 数组），故这里从
+  // knownById 全量挑即完整，跨来源稳健。
+  const attention = [...app.knownById.values()].filter((s) => s.approvals || s.running || activeFresh(s));
   const attnIds = new Set(attention.map((s) => s.id));
 
-  // 大字状态行只在有事发生时出现（对标官方的安静首页）
+  // 大字状态行只在有事发生时出现（对标官方的安静首页）。三档分开数：
+  // 审批 > 运行中（daemon 驱动的任务）> 桌面活动（文件活跃启发式，不冒充"任务在跑"）
   const apprN = attention.filter((s) => s.approvals).length;
-  const runN = attention.filter((s) => !s.approvals && (s.running || s.active)).length;
-  if (apprN || runN) {
+  const runN = attention.filter((s) => !s.approvals && s.running).length;
+  const actN = attention.length - apprN - runN;
+  if (apprN || runN || actN) {
     const headline = document.createElement("div");
     headline.id = "headline";
     if (apprN) {
       headline.className = "warn";
       headline.textContent = t("home.approvalsN", apprN);
-      if (runN) {
-        const sub = document.createElement("span");
-        sub.className = "sub";
-        sub.textContent = t("home.alsoRunningN", runN);
-        headline.appendChild(sub);
-      }
-    } else {
+    } else if (runN) {
       headline.textContent = t("home.runningN", runN);
+    } else {
+      headline.textContent = t("home.activeN", actN);
+    }
+    // 副行报下一档：有审批时报运行数，没审批有运行时报桌面活动数
+    const subText = apprN && runN ? t("home.alsoRunningN", runN)
+      : (apprN || runN) && actN ? t("home.alsoActiveN", actN)
+      : "";
+    if (subText) {
+      const sub = document.createElement("span");
+      sub.className = "sub";
+      sub.textContent = subText;
+      headline.appendChild(sub);
     }
     list.appendChild(headline);
   }
@@ -3249,6 +3273,8 @@ function renderList() {
     n.textContent = q ? t("list.nomatch") : t("list.empty");
     list.appendChild(n);
   }
+
+  scheduleActiveRecheck(); // 有"桌面活动"行时到期复核，没有则自动歇手
 }
 
 // 时间线模式：懒加载分页（底部「加载更多」），不再一次性拉全量。
@@ -3384,6 +3410,7 @@ function applyLang(mode) {
   document.documentElement.lang = LANG === "zh" ? "zh-CN" : "en";
   applyStaticI18n();
   updateLangChecks();
+  updateStatusPill(); // applyStaticI18n 重置了输入框占位为写死的 Codex 串，按当前 agent 复位
   if (app.view === "list") renderList();
 }
 
@@ -3716,15 +3743,43 @@ async function fetchAllSessions({ cap = 1500, maxPages = 20, onProgress } = {}) 
 
 // 各来源会话合并进统一表 knownById（就地合并保持引用稳定，看板补丁不丢），
 // 同步会话名，并刷新 lastSessions 数组视图（散落消费点兜底）。
-function ingestSessions(arr) {
+// seenAt：这批数据从 daemon 取到的时刻（快照回灌时传快照落盘时刻）。active 的本地衰减靠它。
+function ingestSessions(arr, seenAt = Date.now()) {
   for (const s of arr || []) {
     if (!s?.id) continue;
     const ex = app.knownById.get(s.id);
-    if (ex) Object.assign(ex, s);
-    else app.knownById.set(s.id, { ...s });
+    if (ex) Object.assign(ex, s, { seenAt });
+    else app.knownById.set(s.id, { ...s, seenAt });
     app.sessionNames.set(s.id, s.name || s.preview?.slice(0, 24) || t("session.fallback"));
   }
   app.lastSessions = [...app.knownById.values()];
+}
+
+// active（文件近 60s 有写入）是 daemon 取数那一刻的快照布尔，之后没有任何翻转推送
+// （桌面驱动的会话不产生 board.changed）——不衰减的话"运行中"会冻结在屏幕上。
+// 按取数时刻本地过期，到期由 scheduleActiveRecheck 向 daemon 复核。
+const ACTIVE_TTL = 60_000;
+function activeFresh(s) {
+  return !!s?.active && Date.now() - (s.seenAt || 0) < ACTIVE_TTL;
+}
+
+// 屏上还有"桌面活动"会话时，在最早到期时刻复核一次：文件仍在写 → 刷回 true 续亮；
+// 桌面停了 → 自然熄灭。复核失败（断网等）降级为纯本地重绘，衰减照样生效。
+let activeRecheckTimer = null;
+function scheduleActiveRecheck() {
+  clearTimeout(activeRecheckTimer);
+  activeRecheckTimer = null;
+  let due = Infinity;
+  for (const s of app.knownById.values()) {
+    if (s.approvals || s.running || !activeFresh(s)) continue;
+    due = Math.min(due, (s.seenAt || 0) + ACTIVE_TTL);
+  }
+  if (due === Infinity) return;
+  activeRecheckTimer = setTimeout(() => {
+    activeRecheckTimer = null;
+    if (app.view !== "list" || document.visibilityState !== "visible") return;
+    refreshList().catch(() => renderList());
+  }, Math.max(5_000, due - Date.now() + 1_000));
 }
 
 function removeSessionFromLists(id) {
@@ -4027,7 +4082,7 @@ function saveBoardSnapshot() {
   const did = app.session?.info?.id;
   if (!did || app.isViewer || app.homeMode !== "projects") return;
   try {
-    const attention = [...app.knownById.values()].filter((s) => s.approvals || s.running || s.active);
+    const attention = [...app.knownById.values()].filter((s) => s.approvals || s.running || activeFresh(s));
     const snap = JSON.stringify({
       v: 1, at: Date.now(),
       projects: app.projects,
@@ -4045,9 +4100,11 @@ function hydrateBoardSnapshot(daemonId) {
   if (!snap || snap.v !== 1 || !Array.isArray(snap.projects)) return;
   app.projects = snap.projects;
   app.projByCwd = new Map(app.projects.map((p) => [normSep(p.cwd), p]));
-  ingestSessions(Array.isArray(snap.attention) ? snap.attention : []);
+  // seenAt 用快照落盘时刻：陈旧快照里的 active 立即按实际年龄衰减，不闪现假"运行中"
+  const at = Number(snap.at) || 0;
+  ingestSessions(Array.isArray(snap.attention) ? snap.attention : [], at);
   app.headSessions = Array.isArray(snap.head) ? snap.head : [];
-  ingestSessions(app.headSessions);
+  ingestSessions(app.headSessions, at);
   if (app.view === "list") renderList();
 }
 // 令牌被撤销/删除电脑时清掉该 daemon 的全部快照（含各 agent），下次配对不闪现旧列表
@@ -4319,7 +4376,7 @@ async function openSession(id, title, opts = {}) {
   app.pendingWatch = !!(opts.fresh || opts.draft);
   app.running = false;
   app.echoes = [];
-  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.claudeIdle); app.claudeIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
+  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.desktopIdle); app.desktopIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
   app.todoCollapsed = false; // 折叠态是会话级选择：进会话复位；快照重放（加载更早/重连）不动它
   app.seenImages.clear();
   app.sawFunctionCalls = false;
@@ -4429,7 +4486,7 @@ async function closeSession() {
   app.pendingWatch = false;
   app.echoes = [];
   app.suppressUserImages = 0;
-  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.claudeIdle); app.claudeIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
+  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.desktopIdle); app.desktopIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
   app.stream = null;
   app.proc = null;
   app.permState = null;
@@ -4481,7 +4538,7 @@ function setRunning(running, driver = "daemon", startAt) {
     clearInterval(app.runTimer);
     app.runTimer = null;
   }
-  if (!running) { clearTimeout(app.claudeIdle); app.claudeIdle = null; } // 收尾同时撤掉 tail 空闲兜底
+  if (!running) { clearTimeout(app.desktopIdle); app.desktopIdle = null; } // 收尾同时撤掉 tail 空闲兜底
   updateStatusStrip();
   updateActLine();
   if (!running) flushQueue();
@@ -4493,6 +4550,7 @@ function tailRunning(on, startedAtSec) {
   if (on) {
     const driver = app.running && app.driver === "daemon" ? "daemon" : "desktop";
     setRunning(true, driver, startedAtSec ? startedAtSec * 1000 : undefined);
+    if (driver === "desktop") desktopIdleArm();
   } else {
     setRunning(false);
   }
@@ -6337,17 +6395,23 @@ function trackCodexActivity(item) {
   }
 }
 
+// 桌面驱动运行态的空闲兜底：桌面端的收尾事件可能永远不来（TUI 被强杀没写 task_complete、
+// 中断的 Claude 轮次没有 end_turn），每有 tail 增量续 2 分钟，静默超时视为已结束。
+// 只撤运行态（不确定的收尾，不钉总结）；权威收尾走 task_complete / end_turn / daemon turn/completed。
+function desktopIdleArm() {
+  clearTimeout(app.desktopIdle);
+  app.desktopIdle = setTimeout(() => {
+    if (app.driver === "desktop") setRunning(false);
+  }, 120000);
+}
+
 // Claude 桌面驱动会话的运行态推断：daemon 只把"自己驱动的 turn"标 running，围观本地 claude 会话时
 // known.running 恒 false，而 Claude 的 tail 又没有 Codex 那种 task_started 事件。故用 live 增量近似：
-// 有增量即视为运行中（driver=desktop），拿 assistant 的 stop_reason:end_turn 精确收尾，另加空闲超时兜底。
+// 有增量即视为运行中（driver=desktop），拿 assistant 的 stop_reason:end_turn 精确收尾，
+// 空闲兜底由 tailRunning 内的 desktopIdleArm 统一挂。
 function claudeTailPulse() {
   if (app.driver === "daemon") return; // daemon 驱动：别降级，交给 onLive
   tailRunning(true);                    // driver 落 desktop（rising edge 会重置 token 计数）
-  clearTimeout(app.claudeIdle);
-  app.claudeIdle = setTimeout(() => {
-    // 空闲兜底只撤运行态（不确定的收尾，不钉总结）；权威收尾走 end_turn / daemon turn/completed。
-    if (app.driver === "desktop") setRunning(false);
-  }, 120000);
 }
 
 // 输入框占位随当前 agent 变（i18n 串里写死了 "Codex"，按名替换）
@@ -6361,6 +6425,9 @@ function renderInto(items, live = false) {
   // 回放（从头读）：新内容追加在下方，读者自己往下滚，绝不替他跳到末尾
   const stick = !app.replayMode && !app.loadingEarlier && nearBottom();
   const frag = document.createDocumentFragment();
+  // 桌面驱动运行中：任何 live 增量都说明还活着，续空闲兜底（Codex 长轮次没有逐批脉冲，
+  // 只在 task_started 点亮一次，不续的话超过兜底窗口会被误判结束）
+  if (live && app.driver === "desktop") desktopIdleArm();
   // 桌面驱动 Claude 会话的运行态推断（见 claudeTailPulse）：先点亮，本批 token 才会被计入
   let claudeEndTurn = false;
   if (live && app.agent === "claude" && items.some(isClaudeItem)) {
@@ -6491,7 +6558,12 @@ function renderInto(items, live = false) {
     if (item?.type === "event_msg") {
       const pt = item.payload?.type;
       if (pt === "task_started") {
-        if (!app.loadingEarlier) tailRunning(true, item.payload?.started_at);
+        // 快照里悬空的 task_started（桌面端被强杀/崩溃，task_complete 没落盘）不可信：
+        // 非 live 批次只在会话确实还活着（daemon 在驱动 / 文件近期有写入 / 观众端 daemon
+        // 判了 tail 模式）时才点亮。点亮后仍有桌面空闲兜底（tailRunning → desktopIdleArm）。
+        const known = app.knownById.get(app.currentId);
+        const trusted = live || known?.running || activeFresh(known) || (app.isViewer && !app.replayMode);
+        if (!app.loadingEarlier && trusted) tailRunning(true, item.payload?.started_at);
         procStart(item);
       }
       else if (pt === "task_complete") {
@@ -6798,7 +6870,7 @@ function onLive(event, params) {
 function renderFullSnapshotItems(items, { snapshotEnd = false, loadedCount = null } = {}) {
   if (!app.replayMode && loadedCount != null) setHistoryLoadedCount(loadedCount);
   $("log").innerHTML = "";
-  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.claudeIdle); app.claudeIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
+  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.desktopIdle); app.desktopIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
   app.seenImages.clear(); // 快照重放会重发同批 imageRef
   app.stream = null; // 元素已随 log 清空
   app.proc = null;
@@ -6921,6 +6993,9 @@ function handleNotify(msg) {
       const dR = (bp.running ? 1 : 0) - (known.running ? 1 : 0);
       known.approvals = bp.approvals || 0;
       known.running = !!bp.running;
+      // daemon 权威宣告轮次结束：文件 mtime 的余温（active）是本轮自己写的，
+      // 不该再以"桌面活动"续亮 60 秒；若桌面真在驱动，下次刷新会重新点亮
+      if (dR < 0) known.active = false;
       const p = app.projByCwd.get(normSep(known.cwd));
       if (p) { p.approvals = Math.max(0, (p.approvals || 0) + dA); p.runningCount = Math.max(0, (p.runningCount || 0) + dR); }
       if (app.view === "list") renderList();
@@ -7052,7 +7127,7 @@ async function switchDaemon(id) {
   updateStatusPill();
   app.view = "list"; app.currentId = null;
   app.echoes = [];
-  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.claudeIdle); app.claudeIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
+  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.desktopIdle); app.desktopIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
   app.seenImages.clear();
   app.stream = null;
   app.proc = null;
@@ -7643,8 +7718,12 @@ async function main() {
   $("dirsheet").onclick = (e) => { if (e.target === $("dirsheet")) $("dirsheet").classList.remove("open"); };
   $("diagsheet").onclick = (e) => { if (e.target === $("diagsheet")) $("diagsheet").classList.remove("open"); };
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") app.session?.ensureAlive();
-    else app.session?.stopPing(); // 切后台立即停心跳，不留后台流量
+    if (document.visibilityState === "visible") {
+      app.session?.ensureAlive();
+      // 后台期间 active 复核定时器不打（见 scheduleActiveRecheck）：回前台补一次列表刷新，
+      // 让"桌面活动/运行中"徽标立即对齐现状，而不是等下一个 board.changed
+      if (app.session && app.view === "list" && !app.isViewer) refreshList().catch(() => {});
+    } else app.session?.stopPing(); // 切后台立即停心跳，不留后台流量
   });
   // 蜂窝↔WiFi 切换、飞行模式恢复：不等退避计时，马上验活/重连。
   // 后台收到 online 不动作（保持零后台活动），回前台由 visibilitychange 补上

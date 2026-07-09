@@ -273,6 +273,28 @@ export class SessionHub {
     for (const client of this.#clients) client.pushEngineState(healthy);
   }
 
+  // 引擎掉线善后：进行中的 turn 与待决审批都活在旧引擎进程的内存里，进程一死
+  // turn/completed 永远不会来——不清的话看板"运行中"卡到 daemon 重启，审批卡也悬到
+  // 超时。#resumed 一并清：重拉的新引擎里这些 thread 尚未 resume，留着会让
+  // #ensureResumed 误跳过、下一次发消息直接失败。幂等（ws 断开与进程退出可能各触发一次）。
+  engineReset() {
+    if (this.#currentTurn.size === 0 && this.#approvals.size === 0 && this.#resumed.size === 0) return;
+    this.#resumed.clear();
+    const threads = new Set(this.#currentTurn.keys());
+    this.#currentTurn.clear();
+    for (const [approvalKey, entry] of this.#approvals) {
+      threads.add(entry.threadId);
+      for (const client of this.#clients) {
+        if (client.isViewer) continue;
+        client.pushApprovalResolved(approvalKey, this.#agent);
+      }
+    }
+    this.#approvals.clear();
+    this.#updateAwake();
+    for (const threadId of threads) this.#broadcastBoard(threadId);
+    if (threads.size) this.#log(`引擎掉线：已清理 ${threads.size} 个会话的运行/审批状态`);
+  }
+
   // —— 看板状态 ——
   isRunning(threadId) {
     return this.#currentTurn.has(threadId);

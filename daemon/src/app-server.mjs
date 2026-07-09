@@ -1,9 +1,65 @@
 // 拉起并驱动 codex app-server（JSON-RPC over WebSocket）
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync, rmSync } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { codexInvocation } from "./codex-path.mjs";
 import { CachedProjects } from "./project-index.mjs";
+
+// 杀掉 codex 整棵进程树。codex 是「node wrapper → 原生二进制」两级进程，只 kill
+// wrapper 信号不转发，原生子进程会变孤儿泄漏（历史上攒到几十个占端口/内存）。
+// 故 spawn 时 detached 令其自成进程组，这里用负 pid 一次带走组内全部。
+export function killProcessTree(pid, log = () => {}) {
+  if (!pid) return;
+  if (process.platform === "win32") {
+    // Windows 无 POSIX 进程组语义：taskkill /t 递归杀子树
+    try {
+      execFileSync("taskkill", ["/pid", String(pid), "/t", "/f"], { windowsHide: true });
+    } catch (err) {
+      log(`taskkill 失败 pid=${pid}: ${err?.message ?? err}`);
+    }
+    return;
+  }
+  try {
+    process.kill(-pid, "SIGTERM"); // 负 pid = 整个进程组
+  } catch {
+    try { process.kill(pid, "SIGTERM"); } catch {} // 组不存在则退回单进程
+  }
+  // 宽限后强杀兜底：wrapper/原生任一忽略 SIGTERM 也确保退出
+  setTimeout(() => {
+    try { process.kill(-pid, "SIGKILL"); } catch {}
+  }, 2000).unref?.();
+}
+
+// 清理上一条 daemon 生命周期遗留的 codex（进程被 SIGKILL/崩溃时来不及走 stop 的兜底）。
+// 只认 pidfile 记录的那个 pid，且必须仍是活着的 codex app-server 才动手——避免 pid 回收
+// 后误杀无关进程。启动时在 spawn 新实例之前调用。
+export function reapStaleAppServer(pidFile, log = () => {}) {
+  let pid;
+  try {
+    pid = Number.parseInt(readFileSync(pidFile, "utf8").trim(), 10);
+  } catch {
+    return; // 无 pidfile = 上次干净退出，无需清理
+  }
+  if (Number.isInteger(pid) && pid > 0 && isStaleCodex(pid)) {
+    log(`清理上次遗留的 codex app-server（pid=${pid}）`);
+    killProcessTree(pid, log);
+  }
+  try { rmSync(pidFile); } catch {}
+}
+
+// 确认 pid 仍指向我们的 codex app-server（含 --listen ws://127.0.0.1），而非被回收给别的进程
+function isStaleCodex(pid) {
+  if (process.platform === "win32") return true; // Windows 上不做命令行核对，交给 taskkill 自身校验
+  try {
+    const cmd = execFileSync("ps", ["-p", String(pid), "-o", "command="], {
+      encoding: "utf8",
+    });
+    return /codex\b.*app-server.*--listen ws:\/\/127\.0\.0\.1/.test(cmd);
+  } catch {
+    return false; // ps 查不到 = 进程已不在
+  }
+}
 
 export class AppServer {
   #command;
@@ -14,6 +70,7 @@ export class AppServer {
   #pending = new Map();
   #log;
   #closed = false;
+  #pidFile = null; // 记录子进程 pid，供下次启动清理崩溃残留（见 reapStaleAppServer）
   // 首页「按项目」聚合缓存：本地全量扫描一次分组，projects.list 命中即 0 往返（见 project-index.mjs）
   #projects = new CachedProjects(() => this.listThreads(5000));
 
@@ -26,10 +83,11 @@ export class AppServer {
     return this.#ws !== null;
   }
 
-  constructor({ command = "codex", port = 19271, log = () => {} } = {}) {
+  constructor({ command = "codex", port = 19271, log = () => {}, pidFile = null } = {}) {
     this.#command = command;
     this.#port = port;
     this.#log = log;
+    this.#pidFile = pidFile;
   }
 
   get url() {
@@ -46,7 +104,18 @@ export class AppServer {
     this.#child = spawn(invocation.command, invocation.args, {
       stdio: ["ignore", "ignore", "pipe"],
       windowsHide: true,
+      // 自成进程组：codex 的 node wrapper 不转发信号给原生子进程，只有成组后
+      // stop() 才能用负 pid 把 wrapper+原生一并带走，不留孤儿（见 killProcessTree）。
+      detached: true,
     });
+    // 记录 pid：本次若被 SIGKILL/崩溃来不及 stop，下次启动靠它清理残留（reapStaleAppServer）
+    if (this.#pidFile && this.#child.pid) {
+      try {
+        writeFileSync(this.#pidFile, String(this.#child.pid));
+      } catch (err) {
+        this.#log(`写 app-server pidfile 失败: ${err?.message ?? err}`);
+      }
+    }
     const spawnError = new Promise((resolve) => {
       this.#child.once("error", (err) => {
         this.#log(`app-server 启动进程失败: ${err.message}`);
@@ -317,6 +386,9 @@ export class AppServer {
   stop() {
     this.#closed = true;
     this.#ws?.close();
-    this.#child?.kill();
+    killProcessTree(this.#child?.pid, this.#log);
+    if (this.#pidFile) {
+      try { rmSync(this.#pidFile); } catch {}
+    }
   }
 }

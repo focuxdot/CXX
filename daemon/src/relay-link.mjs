@@ -3,6 +3,9 @@ const HEARTBEAT_MS = 25000;
 const HB_TIMEOUT_MS = 10000; // hb 发出后这么久没回包即判链路死亡（网络切换/唤醒后 TCP 假活）
 const BACKOFF_BASE_MS = 1000;
 const BACKOFF_MAX_MS = 15000; // 上限太高会让电脑唤醒后长时间假离线
+// onopen 迟迟不来的兜底：TCP/WS 握手卡死、DNS 挂起时 socket 长驻 CONNECTING，
+// onopen 与 onclose 都不触发、心跳（仅 open 后起）也不跑——无此超时即永久假离线。
+const CONNECT_TIMEOUT_MS = 15000;
 
 export function daemonRelayUrl(
   relayUrl,
@@ -37,8 +40,30 @@ export class RelayLink {
 
   #connect() {
     if (this.#closed) return;
-    const ws = new WebSocket(this.#url);
+    let ws;
+    try {
+      ws = new WebSocket(this.#url);
+    } catch (err) {
+      // 构造即抛（瞬时资源/URL 解析错误）：本方法多经 setTimeout 回调进入，
+      // 异常逸出会被运行时吞掉、既无 onclose 也无下次重连——重连链就此死死。
+      this.#handlers.log(`relay 连接创建失败：${err?.message ?? err}`);
+      this.#onDisconnect();
+      return;
+    }
+    // 握手兜底计时器：onopen 建连成功、onclose 建连失败——二者都不来（卡在 CONNECTING）
+    // 时由它判死并重连。onopen/onclose 命中即清除，故它只在真·卡死时触发。
+    const connectTimer = setTimeout(() => {
+      if (this.#closed || this.#ws === ws) return; // 已 open 或已停止
+      this.#handlers.log("relay 建连握手超时，判定链路死亡，重连");
+      ws.onopen = null;
+      ws.onclose = null;
+      ws.onmessage = null;
+      try { ws.close(); } catch {}
+      this.#onDisconnect();
+    }, CONNECT_TIMEOUT_MS);
+    connectTimer.unref?.();
     ws.onopen = () => {
+      clearTimeout(connectTimer);
       this.#attempt = 0;
       this.#ws = ws;
       this.#lastPong = Date.now();
@@ -71,7 +96,10 @@ export class RelayLink {
           break; // 未知帧忽略，保证向前兼容
       }
     };
-    ws.onclose = () => this.#onDisconnect();
+    ws.onclose = () => {
+      clearTimeout(connectTimer);
+      this.#onDisconnect();
+    };
     ws.onerror = () => {};
   }
 

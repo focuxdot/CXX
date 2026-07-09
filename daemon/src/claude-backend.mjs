@@ -468,6 +468,19 @@ export class ClaudeBackend {
     return null;
   }
 
+  // Poll for a just-started session's file to appear. Only ever called with a
+  // turn in flight (see readThread); gives up early if that turn ends without
+  // producing a file (spawn/auth failure → legitimately missing).
+  async #waitForFile(id, timeoutMs = 3000, stepMs = 80) {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const path = this.#findFile(id);
+      if (path) return path;
+      if (!this.#turns.has(id) || Date.now() >= deadline) return null;
+      await new Promise((resolve) => setTimeout(resolve, stepMs));
+    }
+  }
+
   // Read head (and tail, for large files) of a session file and derive display meta:
   // { preview, cwd, gitBranch, name }. Bounded reads keep list latency low even when a
   // session file is multiple MB.
@@ -606,7 +619,13 @@ export class ClaudeBackend {
 
   // Read one session by id (watch / share resolve its file path through this).
   async readThread(threadId) {
-    const path = this.#findFile(threadId);
+    let path = this.#findFile(threadId);
+    // A brand-new session's JSONL is created by the `claude -p --session-id`
+    // child a beat after spawn, but startSession returns as soon as the turn is
+    // dispatched — so the phone's follow-up session.watch can race ahead of the
+    // file and 404 ("会话不存在"). When a turn is in flight for this id, wait
+    // briefly for the file to land instead of reporting it missing.
+    if (!path && this.#turns.has(threadId)) path = await this.#waitForFile(threadId);
     if (!path) return null;
     let mtimeMs = 0;
     try {

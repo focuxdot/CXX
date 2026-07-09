@@ -9,7 +9,7 @@ import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
 import { createInterface } from "node:readline";
 
-import { AppServer } from "./app-server.mjs";
+import { AppServer, reapStaleAppServer } from "./app-server.mjs";
 import { ClaudeBackend } from "./claude-backend.mjs";
 import { ClientSession } from "./client-session.mjs";
 import { resolveCodexCommand } from "./codex-path.mjs";
@@ -127,10 +127,14 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
   if (fallback) {
     log(`app-server 首选端口 ${config.appServerPort} 被占用（可能是官方 Codex），改用 ${appServerPort}`);
   }
+  // 起新引擎前先清理上次崩溃/被强杀遗留的 codex（正常 stop 不会有残留；此为兜底）
+  const appServerPidFile = join(dirname(configPath), "app-server.pid");
+  reapStaleAppServer(appServerPidFile, log);
   const appServer = new AppServer({
     command: resolvedCodex,
     port: appServerPort,
     log,
+    pidFile: appServerPidFile,
   });
   try {
     await appServer.start();
@@ -213,6 +217,8 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
   });
   // 引擎状态变化（崩溃自动重拉期间）推给手机端，供分层连接诊断；同时上报壳 IPC
   appServer.onStateChange = (healthy) => {
+    // 掉线先善后：旧引擎里的 turn/审批已随进程死亡，清运行态并广播（否则看板卡"运行中"）
+    if (!healthy) hub.engineReset();
     hub.broadcastEngineState(healthy);
     emit({ event: "engine", healthy });
   };
