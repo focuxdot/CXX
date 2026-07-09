@@ -33,6 +33,8 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 CloseApplications=no
+; 装/卸时改了用户 PATH（加/去 {app}），让资源管理器广播环境变量变更，新开的终端即时生效。
+ChangesEnvironment=yes
 
 [Files]
 Source: "{#SourceRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -44,6 +46,12 @@ Name: "{autodesktop}\CXX"; Filename: "{app}\CXX.exe"; Parameters: "--pair"; Work
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
 
+[Registry]
+; 全局 `cxx` 命令：把 {app}（含 cxx.cmd → resources\cxx-daemon.exe）加进用户 PATH。
+; 仅在尚未包含时追加，避免重复安装把 PATH 撑肥；卸载时由 [Code] 精确摘除本条目。
+Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; \
+  ValueData: "{olddata};{app}"; Flags: preservestringtype; Check: NeedsAddPath('{app}')
+
 [Run]
 Filename: "{app}\CXX.exe"; Parameters: "--pair"; Description: "Launch CXX"; WorkingDir: "{app}"; Flags: postinstall nowait skipifsilent
 
@@ -53,6 +61,42 @@ Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN CXXRemote /F"; Flags: r
 Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM CXX.exe /T"; Flags: runhidden; RunOnceId: "KillCXX"
 
 [Code]
+// PATH 里是否还没有 {app}（分号包裹后大小写不敏感地子串匹配，避免重复追加）。
+function NeedsAddPath(Param: String): Boolean;
+var
+  OrigPath: String;
+begin
+  if not RegQueryStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', OrigPath) then
+  begin
+    Result := True;
+    exit;
+  end;
+  Result := Pos(';' + Lowercase(Param) + ';', ';' + Lowercase(OrigPath) + ';') = 0;
+end;
+
+// 卸载时只摘掉我们加的 {app} 段，绝不动整条 PATH。
+procedure RemoveFromPath(Param: String);
+var
+  OrigPath, NewPath: String;
+begin
+  if not RegQueryStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', OrigPath) then
+    exit;
+  NewPath := ';' + OrigPath + ';';
+  StringChangeEx(NewPath, ';' + Param + ';', ';', True);
+  // 去掉前面补的两个哨兵分号
+  if (Length(NewPath) >= 1) and (NewPath[1] = ';') then
+    Delete(NewPath, 1, 1);
+  if (Length(NewPath) >= 1) and (NewPath[Length(NewPath)] = ';') then
+    Delete(NewPath, Length(NewPath), 1);
+  RegWriteExpandStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', NewPath);
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then
+    RemoveFromPath(ExpandConstant('{app}'));
+end;
+
 procedure StopCXXProcesses;
 var
   ResultCode: Integer;

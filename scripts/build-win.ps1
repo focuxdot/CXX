@@ -46,6 +46,7 @@ New-Item -ItemType Directory -Force -Path $StageRoot | Out-Null
 
 Copy-File (Join-Path $ProjectRoot "dist\sea\cxx-daemon.exe") (Join-Path $StageRoot "resources\cxx-daemon.exe")
 Copy-File (Join-Path $ProjectRoot "shell\windows\run-hidden.vbs") (Join-Path $StageRoot "resources\run-hidden.vbs")
+Copy-File (Join-Path $ProjectRoot "packaging\windows\cxx.cmd") (Join-Path $StageRoot "cxx.cmd")
 Copy-File (Join-Path $ProjectRoot "web\icons\menubar.png") (Join-Path $StageRoot "resources\menubar.png")
 Copy-File (Join-Path $ProjectRoot "README.md") (Join-Path $StageRoot "README.md")
 Copy-File (Join-Path $ProjectRoot "README.en.md") (Join-Path $StageRoot "README.en.md")
@@ -57,7 +58,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $Files = [ordered]@{}
-foreach ($name in @("CXX.exe", "resources\cxx-daemon.exe", "resources\run-hidden.vbs", "resources\menubar.png", "README.md", "README.en.md", "LICENSE")) {
+foreach ($name in @("CXX.exe", "cxx.cmd", "resources\cxx-daemon.exe", "resources\run-hidden.vbs", "resources\menubar.png", "README.md", "README.en.md", "LICENSE")) {
   $p = Join-Path $StageRoot $name
   $Files[$name] = [ordered]@{
     sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $p).Hash.ToLowerInvariant()

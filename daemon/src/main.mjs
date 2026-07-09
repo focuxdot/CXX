@@ -33,9 +33,11 @@ import { Notifier, normalizeNotifier, redact } from "./notify.mjs";
 import { MENU_COMMANDS, runMenuCommand } from "./menu-backend.mjs";
 import { makeDeps as makeMacAgentDeps } from "./mac-agent.mjs";
 import { makeDeps as makeWinAgentDeps } from "./win-agent.mjs";
+import { makeDeps as makeLinuxAgentDeps } from "./linux-agent.mjs";
 import { PowerManager } from "./power.mjs";
 import { RelayLink } from "./relay-link.mjs";
 import { SessionHub } from "./session-hub.mjs";
+import { cxxVersion } from "./version.mjs";
 import { resolve as resolvePath, sep as pathSep } from "node:path";
 
 // Windows 上 daemon 由计划任务拉起，<Exec> 无法重定向 stdout（Mac 靠 launchd 的
@@ -68,11 +70,12 @@ function makeMenuDeps({ configPath }) {
   };
   if (process.platform === "darwin") return makeMacAgentDeps(base);
   if (process.platform === "win32") return makeWinAgentDeps(base);
+  if (process.platform === "linux") return makeLinuxAgentDeps(base);
   return {
     ...base,
     isEnabled: () => false,
     isRunning: () => false,
-    enable: () => ({ ok: false, enabled: false, error: "仅支持 macOS / Windows" }),
+    enable: () => ({ ok: false, enabled: false, error: "仅支持 macOS / Windows / Linux" }),
     disable: () => ({ ok: true, enabled: false }),
   };
 }
@@ -81,7 +84,8 @@ function makeMenuDeps({ configPath }) {
 // 默认 no-op，CLI/冒烟直跑不受影响。事件形如 { event, ... }。
 export async function startDaemon({ configPath, overrides = {}, emit = () => {} }) {
   const config = loadOrCreateConfig(configPath);
-  // win32：daemon 自记日志到 config 同目录的 daemon.log（计划任务无法重定向 stdout）
+  // win32：计划任务无法重定向 stdout，daemon 自记日志到 config 同目录的 daemon.log。
+  // macOS / Linux 分别由 launchd StandardOutPath、systemd StandardOutput=append 落盘，勿重复写。
   if (process.platform === "win32") {
     logFile = join(dirname(configPath), "daemon.log");
     try {
@@ -458,6 +462,56 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
   };
 }
 
+// 全局 CLI 帮助。裸 `cxx` 与 `cxx help` / `--help` 都打印它。
+// 分组按「日常最常用 → 偏运维」排列；GUI 专用的 JSON 子命令（pair-once / notify-* /
+// check-update 的机读形态）不在这里列，避免误导人手敲——人用 notify --... 这套。
+// 在无菜单栏的 headless Mac / 服务器上，这套子命令就是唯一入口。
+const HELP = `CXX（C叉叉）— 用手机远程控制本机的 Codex / Claude Code
+
+用法: cxx <命令> [选项]
+
+远程服务:
+  enable                开启开机自启并立即启动后台服务
+                          （macOS launchd / Windows 计划任务 / Linux systemd --user）
+  disable               停止后台服务并关闭开机自启
+  status                打印当前状态（JSON: 是否启用/运行、设备数、relay 等）
+  start                 前台启动 daemon（一般由系统服务托管；无头调试可直接敲）
+      --relay <wss://…>   指定 relay 地址（持久化到配置）
+      --claude <cmd>      指定 claude 二进制路径（缺省自动探测）
+      --codex <cmd>       指定 codex 二进制路径（缺省自动探测）
+      --no-prevent-sleep  运行期间不阻止系统睡眠
+
+配对与设备:
+  pair                  生成永久设备链接（JSON: url；手机打开后长期绑定，可 revoke）
+  pair-once             生成一次性配对链接（5 分钟有效，适合临时发出去）
+  devices               列出已配对设备（JSON）
+  revoke <deviceId>     撤销某台设备（立即踢线）
+  prune-unused          清理从未上线过的设备
+
+通知（任务完成/待审批时推到手机，只发摘要不含代码原文）:
+  notify --list                     列出已配置渠道
+  notify --add bark --key <key>     Bark（iOS，可加 --server 自托管地址）
+  notify --add serverchan --key <k> Server 酱（微信）
+  notify --add wecom --url <url>    企业微信群机器人
+  notify --add dingtalk --url <url> 钉钉群机器人
+  notify --add custom --url <url>   自定义 webhook
+  notify --remove <序号>            删除第 N 个渠道
+  notify --clear                    清空所有渠道
+  notify --test                     向所有渠道发测试通知
+
+其他:
+  check-update          检查是否有新版本
+  help, --help, -h      显示本帮助
+  version, --version    显示版本号
+
+通用选项:
+  --config <path>       指定配置文件路径（缺省 ~ 下默认位置）
+
+示例:
+  cxx pair                          # 配对手机
+  cxx notify --add bark --key abc   # 加一个 Bark 通知渠道
+  cxx status                        # 看远程是否在跑`;
+
 const NOTIFY_USAGE = `通知渠道管理：
   notify --list                       列出已配置渠道
   notify --add bark --key <key>       添加 Bark（iOS，可加 --server 自托管地址）
@@ -587,6 +641,8 @@ export async function main() {
       claude: { type: "string" }, // 覆盖 claude 二进制路径（缺省自动探测）
       ipc: { type: "boolean" }, // 壳模式：stdout JSON 事件流 + stdin JSON 命令
       "prevent-sleep": { type: "boolean" }, // --no-prevent-sleep 关闭防睡眠
+      help: { type: "boolean", short: "h" },
+      version: { type: "boolean", short: "v" },
       // notify 命令选项
       list: { type: "boolean" },
       add: { type: "string" },
@@ -598,12 +654,23 @@ export async function main() {
       test: { type: "boolean" },
     },
   });
-  const command = positionals[0] ?? "start";
+  const command = positionals[0] ?? "";
   const configPath = values.config ?? defaultConfigPath();
 
-  // 桌面壳的 per-action 后端（Model A）：argv 子命令进 → 单行 JSON 出。
-  // enable/disable 走平台 keepalive（macOS launchd / Windows 计划任务）；其余读改 config，运行中的 daemon 靠
-  // config-watch 热核对。stdout 必须是纯 JSON，日志改走 stderr。
+  // 帮助 / 版本：裸 `cxx`、`cxx help`、`--help`/`-h`、`cxx version`、`--version`/`-v`
+  // 都在此拦下并返回，绝不落到默认的 start（launchd/计划任务始终显式传 start，不受影响）。
+  if (values.version || command === "version") {
+    process.stdout.write(`cxx ${cxxVersion()}\n`);
+    return;
+  }
+  if (values.help || command === "help" || command === "") {
+    process.stdout.write(`${HELP}\n`);
+    return;
+  }
+
+  // 桌面壳 / CLI 的 per-action 后端（Model A）：argv 子命令进 → 单行 JSON 出。
+  // enable/disable 走平台 keepalive（macOS launchd / Windows 计划任务 / Linux systemd --user）；
+  // 其余读改 config，运行中的 daemon 靠 config-watch 热核对。stdout 必须是纯 JSON，日志改走 stderr。
   if (MENU_COMMANDS.has(command)) {
     const deps = makeMenuDeps({ configPath });
     const result = await runMenuCommand(command, positionals.slice(1), deps);
@@ -645,7 +712,7 @@ export async function main() {
     if (ipcMode) startIpcStdin(daemon, shutdown);
     return;
   }
-  console.error(`未知命令: ${command}（支持 start / pair / notify）`);
+  console.error(`未知命令: ${command}\n用 \`cxx help\` 查看全部命令。`);
   process.exit(1);
 }
 

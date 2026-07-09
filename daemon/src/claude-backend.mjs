@@ -19,12 +19,26 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { killProcessTree, reapStalePids, writePidFile } from "./proc-reap.mjs";
 import { CachedProjects, normSep } from "./project-index.mjs";
 import { parseJsonlChunk } from "./rollout-tail.mjs";
 
 // Tools gated behind approval (mutating / command execution). Read-only tools
 // (Read/Grep/Glob/…) run freely so the phone isn't spammed with trivial approvals.
 const GATED_TOOLS = ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit"];
+
+// —— persistent write-path knobs ——
+// One `claude -p --input-format stream-json` child is kept alive per thread and reused
+// across turns (no cold start / MCP re-init per turn). A claude process idles at
+// hundreds of MB, so idle children are reaped and a small cap bounds the fleet.
+const PROC_IDLE_MS = 5 * 60_000;
+const PROC_MAX = 3;
+// Interrupt: try the stream-json control channel first (claude finishes the turn
+// gracefully, keeping partial output); escalate to SIGTERM only if unconfirmed in time.
+const INTERRUPT_GRACE_MS = 3_000;
+// Typing deltas are coalesced before fanning out over the relay (each flush is one
+// frame per watching device; raw token deltas would be dozens of frames per second).
+const DELTA_FLUSH_MS = 150;
 
 // The command that re-invokes THIS daemon in approval-hook mode (CXX_PERM_HOOK=1).
 // SEA single binary → just the binary; source → node + the daemon entry (resolved from
@@ -237,9 +251,17 @@ export class ClaudeBackend {
   #pathById = new Map();
   // Home "by project" aggregation cache — same contract as AppServer (project-index.mjs).
   #projects = new CachedProjects(() => this.listThreads(5000));
-  // Live turns: threadId -> { child, turnId }. One `claude -p` child per in-flight turn.
+  // Live turns: threadId -> { proc, turnId }, present only while a turn is in flight.
   #turns = new Map();
   #turnSeq = 0;
+  // Persistent children: threadId -> proc record (see #spawnProc). A proc may outlive
+  // many turns; it is dropped on option change, external session-file writes, idle
+  // timeout, fleet cap, or process death.
+  #procs = new Map();
+  #reapTimer = null;
+  // 在册的常驻子进程 pid（落盘到 pidfile）：daemon 被 SIGKILL/崩溃来不及 stop 时，
+  // 下次启动靠它清掉孤儿舰队（常驻进程不像旧 per-turn 子进程会自行退出）。
+  #livePids = new Set();
   // Brand-new threads have no session file until their first turn — remember the cwd to
   // spawn in (readThread can't derive it yet).
   #pendingCwd = new Map();
@@ -283,9 +305,49 @@ export class ClaudeBackend {
 
   async start() {
     this.#closed = false;
+    this.#reapStalePids();
     await this.#startApprovalServer();
+    this.#reapTimer = setInterval(() => this.#reapIdleProcs(), 60_000);
+    this.#reapTimer.unref?.();
     this.#ready = true;
     this.onStateChange(true);
+  }
+
+  // —— 崩溃残留清理（pidfile）——
+  #pidFilePath() {
+    return join(dirname(this.#archivePath), "claude-pids.json");
+  }
+
+  #rememberPid(pid) {
+    if (!pid) return;
+    this.#livePids.add(pid);
+    this.#writePids();
+  }
+
+  #forgetPid(pid) {
+    if (!pid || !this.#livePids.delete(pid)) return;
+    this.#writePids();
+  }
+
+  #writePids() {
+    writePidFile(this.#pidFilePath(), this.#livePids, this.#log);
+  }
+
+  #removePidFile() {
+    this.#livePids.clear();
+    try {
+      rmSync(this.#pidFilePath());
+    } catch {
+      // ignore
+    }
+  }
+
+  #reapStalePids() {
+    // 身份正则：我们拉起的 headless claude 命令行必含 stream-json 输入标记
+    reapStalePids(this.#pidFilePath(), /claude\b.*--input-format stream-json/, {
+      log: this.#log,
+      label: "claude 进程",
+    });
   }
 
   // Localhost-only approval endpoint + the --settings file that installs the PreToolUse
@@ -338,14 +400,22 @@ export class ClaudeBackend {
   stop() {
     this.#closed = true;
     this.#ready = false;
-    for (const t of this.#turns.values()) {
-      try {
-        t.child.kill("SIGTERM");
-      } catch {
-        // already gone
-      }
+    clearInterval(this.#reapTimer);
+    this.#reapTimer = null;
+    // Daemon exiting: hard-kill the persistent fleet so no orphan claude keeps running
+    // (a per-turn child used to exit by itself; a persistent one would linger forever).
+    for (const proc of this.#procs.values()) {
+      proc.discarded = true;
+      clearTimeout(proc.deltaTimer);
+      clearTimeout(proc.killTimer);
+      proc.deltaBuf = "";
+      this.#killProc(proc);
     }
+    this.#procs.clear();
     this.#turns.clear();
+    // 舰队已经杀掉，pidfile 必须跟着清：main 在 stop() 后同步 process.exit，子进程
+    // exit 事件（#forgetPid）来不及触发，不清的话每次干净退出都会留下整份 pid 残留。
+    this.#removePidFile();
     // Resolve any waiting approvals as deny so blocked hooks don't hang on shutdown,
     // and tell the hub to drop their cards.
     for (const [requestId, p] of this.#pending) {
@@ -476,7 +546,9 @@ export class ClaudeBackend {
     for (;;) {
       const path = this.#findFile(id);
       if (path) return path;
-      if (!this.#turns.has(id) || Date.now() >= deadline) return null;
+      // 只在真的有子进程在产出文件时等；proc 为 null 的占位（startTurn 自己的
+      // resolveCwd 阶段）不算——否则每次冷启动都会在这里白等满超时。
+      if (!this.#turns.get(id)?.proc || Date.now() >= deadline) return null;
       await new Promise((resolve) => setTimeout(resolve, stepMs));
     }
   }
@@ -625,7 +697,7 @@ export class ClaudeBackend {
     // dispatched — so the phone's follow-up session.watch can race ahead of the
     // file and 404 ("会话不存在"). When a turn is in flight for this id, wait
     // briefly for the file to land instead of reporting it missing.
-    if (!path && this.#turns.has(threadId)) path = await this.#waitForFile(threadId);
+    if (!path && this.#turns.get(threadId)?.proc) path = await this.#waitForFile(threadId);
     if (!path) return null;
     let mtimeMs = 0;
     try {
@@ -664,10 +736,12 @@ export class ClaudeBackend {
   }
 
   // —— write API ——
-  // No persistent server: each turn is one `claude -p ... --input-format stream-json`
-  // child. Claude appends to the SAME session JSONL as it runs, so response content
-  // reaches watchers through the existing RolloutTail — here we only spawn the child and
-  // translate its lifecycle into turn/started·completed·failed for the board/running state.
+  // Persistent headless child per thread: `claude -p --input-format stream-json` keeps
+  // reading user messages from stdin, so consecutive turns reuse one process (no cold
+  // start / MCP re-init per turn). Claude still appends to the SAME session JSONL as it
+  // runs, so response BODY keeps flowing to watchers via RolloutTail; stdout carries the
+  // turn lifecycle (`result` = turn boundary), typing deltas (`stream_event`, coalesced
+  // into agent_message_delta live events) and interrupt control responses.
 
   resumeThread() {
     // Claude resumes per-turn via `--resume`; nothing to pre-warm.
@@ -688,7 +762,59 @@ export class ClaudeBackend {
     if (this.#turns.has(threadId)) {
       throw new Error("该会话已有进行中的轮次");
     }
-    const cwd = await this.#resolveCwd(threadId);
+    const key = this.#turnOptsKey(overrides);
+    const turnId = `ct${++this.#turnSeq}`;
+    // 守卫和占位之间不能隔 await：否则同一会话的并发 startTurn 会双双通过守卫、
+    // 各自 spawn，先来的常驻子进程被挤出 #procs 后就没人管了（不受闲置回收、
+    // stop() 也杀不到），还会两个进程同写一份 session 文件。
+    this.#turns.set(threadId, { proc: null, turnId });
+    let proc = null;
+    try {
+      proc = this.#procs.get(threadId) || null;
+      // Reuse only when per-turn options match AND nobody else appended to the session
+      // file since our last turn (same session driven from the desktop CLI meanwhile →
+      // the child's in-memory context would be stale). Mismatch just respawns via
+      // --resume, which re-reads the file — correctness never depends on reuse.
+      if (proc && (proc.dead || proc.key !== key || !this.#sessionFileUnchanged(proc))) {
+        this.#discardProc(proc);
+        proc = null;
+      }
+      if (!proc) {
+        const cwd = await this.#resolveCwd(threadId);
+        proc = this.#spawnProc(threadId, cwd, key, overrides);
+        this.#procs.set(threadId, proc);
+        this.#trimProcs(proc);
+      }
+      proc.turnId = turnId;
+      proc.interrupted = false;
+      proc.lastUsed = Date.now();
+      this.#turns.set(threadId, { proc, turnId });
+      try {
+        proc.child.stdin.write(`${JSON.stringify(this.#toStreamInput(input))}\n`);
+      } catch (err) {
+        // stdin already broken（复用窗口内进程刚死）：报错让客户端重试，重试会重新拉起
+        throw new Error(`claude 写入失败: ${err.message}`);
+      }
+    } catch (err) {
+      this.#turns.delete(threadId);
+      if (proc) {
+        proc.turnId = null;
+        this.#discardProc(proc);
+      }
+      throw err;
+    }
+    return { turnId };
+  }
+
+  // Everything that varies per spawn. A different combination can't be applied to a
+  // live child, so it forces a respawn (--settings/hook wiring is per-daemon constant).
+  #turnOptsKey(overrides = {}) {
+    const model = typeof overrides?.model === "string" ? overrides.model : "";
+    const effort = CLAUDE_ALLOWED_EFFORTS.has(overrides?.effort) ? overrides.effort : "";
+    return JSON.stringify([model, effort, this.#permissionModeFor(overrides) || ""]);
+  }
+
+  #spawnProc(threadId, cwd, key, overrides) {
     // Brand-new session (no file yet) → --session-id creates it; existing → --resume
     // continues the SAME file (verified: no fork without --fork-session).
     const isNew = !this.#findFile(threadId);
@@ -701,6 +827,7 @@ export class ClaudeBackend {
       "--output-format",
       "stream-json",
       "--verbose",
+      "--include-partial-messages",
     ];
     if (typeof overrides?.model === "string" && overrides.model) args.push("--model", overrides.model);
     if (CLAUDE_ALLOWED_EFFORTS.has(overrides?.effort)) args.push("--effort", overrides.effort);
@@ -715,64 +842,198 @@ export class ClaudeBackend {
       child = spawn(this.#command, args, {
         cwd: cwd || undefined,
         stdio: ["pipe", "pipe", "pipe"],
+        detached: true, // 自成进程组：终止时负 pid 连 MCP/工具子进程一起带走（同 app-server）
       });
     } catch (err) {
       throw new Error(`claude 启动失败: ${err.message}`);
     }
-    const turnId = `ct${++this.#turnSeq}`;
-    this.#turns.set(threadId, { child, turnId });
-
-    // Feed the single user message, then close stdin so `-p` processes and exits.
-    try {
-      child.stdin.write(`${JSON.stringify(this.#toStreamInput(input))}\n`);
-      child.stdin.end();
-    } catch {
-      // stdin may already be gone if spawn failed late; exit handler will finalize
-    }
-
-    // Watch stdout only for the terminal result marker; body flows via file tail.
-    let buf = "";
-    let sawResult = false;
-    let resultError = false;
+    const proc = {
+      threadId,
+      child,
+      key,
+      turnId: null,        // non-null while a turn is in flight on this child
+      interrupted: false,  // an interrupt was requested for the current turn
+      dead: false,
+      discarded: false,    // dropped from the fleet; exit handler must not finalize a turn twice
+      lastUsed: Date.now(),
+      buf: "",
+      skipLine: false,     // 超长行丢弃中：吃到下一个换行为止，保住后续行的分帧
+      deltaBuf: "",
+      deltaTimer: null,
+      ctrlSeq: 0,
+      ctrlWaiters: new Map(), // control request_id -> resolve（interrupt 确认回执）
+      killTimer: null,
+      fileSize: -1, // session 文件在上一轮结束时的大小（外部写入检测基线）
+    };
+    this.#rememberPid(child.pid);
+    // stdin stays open across turns; a dying child EPIPEs it asynchronously and an
+    // unhandled stream error would crash the whole daemon.
+    child.stdin.on("error", () => {});
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
-      buf += chunk;
-      let idx;
-      while ((idx = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, idx).trim();
-        buf = buf.slice(idx + 1);
-        if (!line) continue;
-        let ev;
-        try {
-          ev = JSON.parse(line);
-        } catch {
-          continue;
-        }
-        if (ev.type === "result") {
-          sawResult = true;
-          resultError = ev.is_error === true || (ev.subtype && ev.subtype !== "success");
-        }
+      // 超长无换行的行（异常洪泛）只丢那一行：清整个 buf 会连带吃掉后面的
+      // result 边界行，轮次就永远收不了尾（会话卡死在 running）
+      if (proc.skipLine) {
+        const nl = chunk.indexOf("\n");
+        if (nl < 0) return;
+        chunk = chunk.slice(nl + 1);
+        proc.skipLine = false;
       }
+      proc.buf += chunk;
+      const { items, rest } = parseJsonlChunk(proc.buf);
+      proc.buf = rest;
+      if (proc.buf.length > 8_000_000) {
+        proc.buf = "";
+        proc.skipLine = true;
+      }
+      for (const ev of items) this.#onProcEvent(proc, ev);
     });
     child.stderr.on("data", (d) => this.#log(`[claude ${threadId.slice(0, 8)}] ${String(d).trimEnd()}`));
     child.on("error", (err) => {
-      this.#turns.delete(threadId);
-      this.#cancelApprovals(threadId, "CXX: 轮次已结束");
-      this.#log(`claude 轮次进程错误: ${err.message}`);
-      this.onNotification("turn/failed", { threadId, turnId });
+      this.#log(`claude 进程错误: ${err.message}`);
+      this.#onProcExit(proc, -1); // spawn 失败（如 ENOENT）时 exit 事件未必会来
     });
-    child.on("exit", (code) => {
-      this.#turns.delete(threadId);
-      this.#pendingCwd.delete(threadId);
-      // Turn ended (completed, failed, or interrupted). Any approval still pending for it
-      // belongs to a now-dead claude that can't act on the decision — deny it and clear the
-      // phone card, else it lingers up to the 10-min timeout as a no-op.
-      this.#cancelApprovals(threadId, "CXX: 轮次已结束");
-      this.invalidateProjects(); // 新会话/更新时刻变化，令首页立即反映
-      const failed = code !== 0 || resultError || !sawResult;
-      this.onNotification(failed ? "turn/failed" : "turn/completed", { threadId, turnId });
-    });
-    return { turnId };
+    child.on("exit", (code) => this.#onProcExit(proc, code));
+    return proc;
+  }
+
+  // stdout stream-json events. `result` is the turn boundary; the child stays alive.
+  #onProcEvent(proc, ev) {
+    if (ev.type === "stream_event") {
+      const e = ev.event;
+      if (proc.turnId && e?.type === "content_block_delta" && e.delta?.type === "text_delta"
+          && typeof e.delta.text === "string" && e.delta.text) {
+        proc.deltaBuf += e.delta.text;
+        if (!proc.deltaTimer) {
+          proc.deltaTimer = setTimeout(() => {
+            proc.deltaTimer = null;
+            this.#flushDeltas(proc);
+          }, DELTA_FLUSH_MS);
+        }
+      }
+      return;
+    }
+    if (ev.type === "result") {
+      const resultError = ev.is_error === true || (ev.subtype && ev.subtype !== "success");
+      // interrupted 只在轮次确实以错误收场时定性为"中止"——中断请求与自然完成赛跑时，
+      // 成功的 result 应如实上报 completed（内容已完整落盘，报"已中止"是误导）
+      this.#finishTurn(proc, resultError ? (proc.interrupted ? "turn/aborted" : "turn/failed") : "turn/completed");
+      return;
+    }
+    if (ev.type === "control_response") {
+      const id = ev.response?.request_id ?? ev.request_id;
+      const waiter = proc.ctrlWaiters.get(id);
+      if (waiter) {
+        proc.ctrlWaiters.delete(id);
+        waiter(ev.response?.subtype !== "error");
+      }
+    }
+  }
+
+  // Turn boundary bookkeeping shared by the normal path (result event) and the death
+  // path (#onProcExit). Any approval still pending belongs to a turn that can't act on
+  // the decision anymore — deny it and clear the phone card.
+  #finishTurn(proc, method) {
+    if (!proc.turnId) return;
+    const { threadId } = proc;
+    const turnId = proc.turnId;
+    proc.turnId = null;
+    proc.interrupted = false;
+    proc.lastUsed = Date.now();
+    clearTimeout(proc.deltaTimer);
+    proc.deltaTimer = null;
+    this.#flushDeltas(proc);
+    const path = this.#findFile(threadId);
+    proc.fileSize = this.#statSize(path);
+    if (this.#turns.get(threadId)?.proc === proc) this.#turns.delete(threadId);
+    // 只有会话文件已创建才丢 pendingCwd：首轮在落盘前就失败时留着它，重试才不会跑错目录
+    if (path) this.#pendingCwd.delete(threadId);
+    this.#cancelApprovals(threadId, "CXX: 轮次已结束");
+    this.invalidateProjects(); // 新会话/更新时刻变化，令首页立即反映
+    this.onNotification(method, { threadId, turnId });
+  }
+
+  #onProcExit(proc, code) {
+    if (proc.dead) return; // error 与 exit 可能各来一次，只收尾一次
+    proc.dead = true;
+    this.#forgetPid(proc.child.pid);
+    clearTimeout(proc.killTimer);
+    for (const waiter of proc.ctrlWaiters.values()) waiter(false);
+    proc.ctrlWaiters.clear();
+    if (this.#procs.get(proc.threadId) === proc) this.#procs.delete(proc.threadId);
+    // Child died mid-turn（正常轮次早在 result 事件就收尾了）：中断算中止，其余算失败。
+    // code===0 + 无 result 的怪异组合也按失败报，宁可让手机看到明确的失败横幅。
+    if (proc.turnId) {
+      const wasInterrupted = proc.interrupted;
+      this.#finishTurn(proc, wasInterrupted ? "turn/aborted" : "turn/failed");
+      if (!wasInterrupted) this.#log(`claude 轮次进程中途退出(code=${code})`);
+    }
+  }
+
+  // 合并后的打字流：一次 flush = 每个观看设备一帧（hub 转发为 session.live）
+  #flushDeltas(proc) {
+    if (!proc.deltaBuf) return;
+    const delta = proc.deltaBuf;
+    proc.deltaBuf = "";
+    this.onNotification("agent_message_delta", { threadId: proc.threadId, delta });
+  }
+
+  // 终止统一走 killProcessTree：claude 是常驻的「wrapper → MCP/工具子进程」树，
+  // 只 kill wrapper 信号不转发会留孤儿（app-server 踩过的同一坑），组杀+SIGKILL 兜底。
+  #killProc(proc) {
+    if (proc.dead) return;
+    killProcessTree(proc.child.pid, this.#log);
+  }
+
+  // Graceful drop: close stdin so claude exits by itself after finishing in-flight
+  // work; hard-kill only if it lingers. Marks the record discarded (idempotence).
+  #discardProc(proc) {
+    if (this.#procs.get(proc.threadId) === proc) this.#procs.delete(proc.threadId);
+    if (proc.dead || proc.discarded) return;
+    proc.discarded = true;
+    try {
+      proc.child.stdin.end();
+    } catch {
+      // already gone
+    }
+    proc.killTimer = setTimeout(() => this.#killProc(proc), 5_000);
+    proc.killTimer.unref?.();
+  }
+
+  // Fleet cap: drop the oldest IDLE children beyond PROC_MAX. Busy children are never
+  // dropped (turns must not be sacrificed to the cap), so the fleet can transiently
+  // exceed the cap under concurrent turns and settles back as they finish.
+  #trimProcs(keep) {
+    if (this.#procs.size <= PROC_MAX) return;
+    const idle = [...this.#procs.values()]
+      .filter((p) => p !== keep && !p.turnId)
+      .sort((a, b) => a.lastUsed - b.lastUsed);
+    for (const p of idle) {
+      if (this.#procs.size <= PROC_MAX) break;
+      this.#discardProc(p);
+    }
+  }
+
+  #reapIdleProcs() {
+    const now = Date.now();
+    for (const proc of this.#procs.values()) {
+      if (!proc.turnId && now - proc.lastUsed > PROC_IDLE_MS) this.#discardProc(proc);
+    }
+  }
+
+  // 复用前哨检查：上轮结束后 session 文件被别人写过（桌面端同会话续聊等）就不复用。
+  // 误判成本只是多一次 --resume 冷启动，判漏才伤正确性，所以基线取轮次收尾瞬间。
+  #sessionFileUnchanged(proc) {
+    if (proc.fileSize < 0) return true; // 尚无基线（进程还没完成过轮次）
+    return this.#statSize(this.#findFile(proc.threadId)) === proc.fileSize;
+  }
+
+  #statSize(path) {
+    try {
+      return path ? statSync(path).size : -1;
+    } catch {
+      return -1;
+    }
   }
 
   #permissionModeFor(overrides = {}) {
@@ -787,16 +1048,56 @@ export class ClaudeBackend {
     return this.#defaultPermissionMode;
   }
 
-  interruptTurn(threadId) {
+  // Interrupt: stream-json control channel first — claude aborts the turn gracefully
+  // (partial output preserved, session file consistent) and emits a `result` that
+  // finalizes as turn/aborted. SIGTERM only when unconfirmed (old CLI / wedged child),
+  // which matches the legacy behavior exactly.
+  async interruptTurn(threadId) {
     const t = this.#turns.get(threadId);
-    if (t?.child) {
-      try {
-        t.child.kill("SIGTERM");
-      } catch {
-        // already exited
-      }
+    // t.proc 为 null = startTurn 正在占位（尚未 spawn/写入），没有可打断的东西
+    if (!t?.proc) return { ok: true };
+    const proc = t.proc;
+    const turnId = proc.turnId;
+    proc.interrupted = true;
+    const confirmed = await this.#requestInterrupt(proc);
+    // Guard on the SAME turn — a new turn may have started on this child meanwhile
+    // (or the turn already finalized) and must not be killed.
+    const killIfSameTurn = () => {
+      if (proc.turnId === turnId) this.#killProc(proc);
+    };
+    if (!confirmed) {
+      killIfSameTurn();
+      return { ok: true };
     }
-    return Promise.resolve({ ok: true });
+    // Confirmed but the closing `result` never lands（异常挂死）: escalate late so the
+    // board doesn't stay "running" forever.
+    const escalate = setTimeout(killIfSameTurn, 5_000);
+    escalate.unref?.();
+    return { ok: true };
+  }
+
+  #requestInterrupt(proc) {
+    if (proc.dead) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (ok) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        proc.ctrlWaiters.delete(id);
+        resolve(ok);
+      };
+      const id = `cxx-int-${++proc.ctrlSeq}`;
+      proc.ctrlWaiters.set(id, finish);
+      const timer = setTimeout(() => finish(false), INTERRUPT_GRACE_MS);
+      try {
+        proc.child.stdin.write(
+          `${JSON.stringify({ type: "control_request", request_id: id, request: { subtype: "interrupt" } })}\n`,
+        );
+      } catch {
+        finish(false);
+      }
+    });
   }
 
   // Session cwd for spawn: pending (brand-new) first, else derived from the file's meta.

@@ -153,6 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(launch)
 
         menu.addItem(.separator())
+        add(menu, L("检查更新…", "Check for updates…"), #selector(doCheckUpdate))
         add(menu, L("反馈问题", "Report an issue"), #selector(doReportIssue))
         add(menu, enabled ? L("退出托盘（远程继续运行）", "Quit tray (remote keeps running)") : L("退出托盘", "Quit tray"), #selector(doQuit))
     }
@@ -202,6 +203,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func doReportIssue() {
         NSWorkspace.shared.open(Self.supportIssuesURL)
+    }
+
+    // 检查更新：daemon 的 check-update 查 GitHub 最新 release（网络最长 8 秒），
+    // 放后台队列避免卡菜单栏；结论回主线程弹窗，有更新就引导去下载页。
+    @objc func doCheckUpdate() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let res = backend(["check-update"])
+            DispatchQueue.main.async { self.presentUpdateResult(res) }
+        }
+    }
+
+    private func presentUpdateResult(_ res: [String: Any]) {
+        let pageURL = (res["url"] as? String).flatMap { URL(string: $0) }
+            ?? URL(string: "https://github.com/focuxdot/CXX/releases/latest")!
+        let current = res["current"] as? String ?? "?"
+        // 成功响应必带 latest；两者皆无 = daemon 没吐 JSON（版本过旧不认识
+        // check-update、或启动即崩，backend() 都返回空字典）——不能当"已是最新"。
+        var err = res["error"].map { "\($0)" }
+        if err == nil, res["latest"] as? String == nil {
+            err = L("后台服务没有返回检查结果（可能版本过旧或未能启动）。",
+                    "The background service returned no result (it may be outdated or failed to start).")
+        }
+        if let err = err {
+            if confirm(L("检查更新失败", "Update check failed"),
+                       L("\(err)\n\n可以手动打开发布页看看是否有新版本。", "\(err)\n\nYou can open the releases page to check manually."),
+                       ok: L("打开发布页", "Open releases page")) {
+                NSWorkspace.shared.open(pageURL)
+            }
+            return
+        }
+        let latest = res["latest"] as? String ?? "?"
+        if res["update"] as? Bool ?? false {
+            // DMG 覆盖安装不会自动重启 LaunchAgent（页面上的 install.sh 会），
+            // 不提示的话后台 daemon 会继续跑旧版本，用户以为更新完了。
+            if confirm(L("发现新版本", "Update available"),
+                       L("最新版本 v\(latest)，当前 v\(current)。\n\n下载 DMG 覆盖安装后，请重新打开托盘，并在菜单点「停用远程」→「扫码配对」，让后台服务切换到新版本（用页面上的 install.sh 安装则全自动）。",
+                         "Latest is v\(latest); you have v\(current).\n\nAfter installing the DMG, reopen the tray, then use “Disable remote” → “Pair a device” so the background service switches to the new version (the install.sh script on the page does all this automatically)."),
+                       ok: L("前往下载", "Download")) {
+                NSWorkspace.shared.open(pageURL)
+            }
+        } else {
+            alert(L("已是最新版本", "Up to date"), L("当前 v\(current) 就是最新版本。", "v\(current) is the latest version."))
+        }
+    }
+
+    // 双按钮确认弹窗：返回是否点了主按钮。
+    private func confirm(_ title: String, _ message: String, ok: String) -> Bool {
+        let a = NSAlert()
+        a.messageText = title
+        a.informativeText = message
+        a.addButton(withTitle: ok)
+        a.addButton(withTitle: L("取消", "Cancel"))
+        NSApp.activate(ignoringOtherApps: true)
+        return a.runModal() == .alertFirstButtonReturn
     }
 
     @objc func toggleLaunchAtLogin() {

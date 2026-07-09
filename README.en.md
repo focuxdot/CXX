@@ -75,7 +75,7 @@ Some mobile / in-app browser engines lack WebCrypto's X25519. CXX ships a **pure
 
 ### One-command install
 
-**macOS**
+**macOS / Linux**
 
 ```bash
 curl -fsSL https://github.com/focuxdot/CXX/releases/latest/download/install.sh | bash
@@ -87,21 +87,31 @@ curl -fsSL https://github.com/focuxdot/CXX/releases/latest/download/install.sh |
 irm https://github.com/focuxdot/CXX/releases/latest/download/install.ps1 | iex
 ```
 
-The installer downloads the latest GitHub Release package and opens CXX; Windows verifies `checksums.txt` first.
+The installer downloads the latest GitHub Release and verifies `checksums.txt`.
 
-Package downloads: [CXX-0.1.2-macos.dmg](https://github.com/focuxdot/CXX/releases/download/v0.1.2/CXX-0.1.2-macos.dmg) · [CXX-0.1.2-win-x64.exe](https://github.com/focuxdot/CXX/releases/download/v0.1.2/CXX-0.1.2-win-x64.exe)
+- **macOS**: installs to `/Applications`; open the menu-bar app to pair.
+- **Linux** (CLI, no tray): installs `~/.local/bin/cxx`, then `cxx enable` → `cxx pair` (open the JSON `url` on your phone). To keep the daemon after SSH logout: `loginctl enable-linger $USER`.
+- **Windows**: run the setup, then open **CXX** from the tray to pair.
 
-After installation, open **CXX** from the desktop or Start menu. It opens the pairing window directly. The background daemon lives under the install directory's `resources` folder; the user-facing entry point is `CXX.exe`.
+Package downloads: [CXX-macos.dmg](https://github.com/focuxdot/CXX/releases/latest/download/CXX-macos.dmg) · [CXX-win-x64.exe](https://github.com/focuxdot/CXX/releases/latest/download/CXX-win-x64.exe) · [cxx-linux-x64](https://github.com/focuxdot/CXX/releases/latest/download/cxx-linux-x64) · [cxx-linux-arm64](https://github.com/focuxdot/CXX/releases/latest/download/cxx-linux-arm64)
 
-### For users: the desktop app
+### Pairing
 
 > [!NOTE]
-> macOS / Windows are available; Linux support is architected and will follow. The phone side is a web page — iOS, Android, and any in-app browser all work.
+> **macOS / Windows** ship a menu-bar / tray shell; **Linux is CLI + systemd** (no tray). The phone side is a web page — iOS, Android, and any in-app browser all work.
 
-1. **Launch the menu-bar app**. Remote is off on first run; the UI shows Chinese or English following your system language.
-2. Click the menu-bar icon → **Pair a device…**: the first click implicitly turns remote on (installs a resident LaunchAgent and starts the daemon; Codex is enabled by default, and Claude Code is added to the switcher when detected) → **shows the pairing QR**.
-3. **Scan to pair** (any browser or QR scanner) — credentials are stored encrypted on the phone, so later visits skip the scan.
-4. **Go remote**: view and take over the computer's Codex or Claude Code sessions from your phone.
+**Desktop (macOS / Windows)**
+
+1. **Launch the menu-bar / tray app**. Remote is off on first run; the UI follows your system language.
+2. Click the icon → **Pair a device…**: the first click turns remote on (installs the keepalive service and starts the daemon) → **shows the pairing QR**.
+3. **Scan to pair** — credentials stay encrypted on the phone, so later visits skip the scan.
+4. **Go remote**: view and take over Codex / Claude Code sessions from your phone.
+
+**Linux (CLI)**
+
+1. `cxx enable` — write a systemd user unit and start the daemon.  
+2. `cxx pair` — JSON with a permanent `url`; open it on your phone. Use `cxx pair-once` for a 5-minute one-shot link.  
+3. `cxx status` / `cxx devices` / `cxx notify …` for ops and notification channels.
 
 > [!TIP]
 > Pin the page to your home screen or keep the chat handy, then jump back to your workspace from anywhere to keep watching tasks, approving, and issuing commands.
@@ -111,17 +121,38 @@ After installation, open **CXX** from the desktop or Start menu. It opens the pa
 Pushed to your phone when a task finishes or blocks on approval. Use a custom webhook for Slack / Telegram / Discord, Bark for iOS, or — in China — ServerChan to reach a WeChat official account:
 
 ```bash
-node daemon/src/main.mjs notify --add custom   --url <url>            # custom webhook (Slack / Telegram / Discord / …)
-node daemon/src/main.mjs notify --add bark     --key <key>            # Bark (iOS, --server for self-hosted)
-node daemon/src/main.mjs notify --add serverchan --key <SendKey>      # ServerChan (WeChat), get a SendKey at https://sct.ftqq.com/
-node daemon/src/main.mjs notify --add wecom    --url <url>            # WeCom group bot
-node daemon/src/main.mjs notify --add dingtalk --url <url>            # DingTalk group bot
-node daemon/src/main.mjs notify --test                               # send a test notification
-node daemon/src/main.mjs notify --list                               # list / --remove <index> to delete
+cxx notify --add custom   --url <url>            # custom webhook (Slack / Telegram / Discord / …)
+cxx notify --add bark     --key <key>            # Bark (iOS, --server for self-hosted)
+cxx notify --add serverchan --key <SendKey>      # ServerChan (WeChat), get a SendKey at https://sct.ftqq.com/
+cxx notify --add wecom    --url <url>            # WeCom group bot
+cxx notify --add dingtalk --url <url>            # DingTalk group bot
+cxx notify --test                               # send a test notification
+cxx notify --list                               # list / --remove <index> to delete
 ```
+
+> [!NOTE]
+> `cxx` is the global command the installer (DMG / Windows setup) drops onto your PATH — it points at the same background binary inside the app. `cxx pair`, `cxx status`, `cxx devices`, etc. all work; run `cxx help` for the full list. Running from source, replace `cxx` with `node daemon/src/main.mjs`.
 
 > [!WARNING]
 > Notifications carry only a **summary** (event type + session name), never raw commands, code, or file paths — third-party push channels are plaintext, so this is a deliberate security constraint.
+
+### CLI cheat-sheet
+
+Day to day the menu-bar icon is enough; on a headless Mac / server the global `cxx` command (dropped on PATH by the installer) is the full entry point (`cxx help` for everything):
+
+```bash
+# Remote service
+cxx enable | disable | status        # enable autostart & run / stop & disable / show status
+# Pairing & devices
+cxx pair                             # generate a one-time pairing QR / link
+cxx devices                          # list paired devices
+cxx revoke <deviceId>                # revoke a device
+# Notifications (see previous section)
+cxx notify --list | --test | --add … # manage channels
+# Misc
+cxx check-update                     # check for a new version
+cxx version                          # print version
+```
 
 ### For developers: run from source
 
@@ -174,7 +205,7 @@ Your computer                                        Phone / browser
 - **daemon** — spawns the official `codex app-server --listen` and registers Claude Code when the `claude` CLI is available; connects outbound to a relay; handles pairing, device management, end-to-end encryption (X25519 + HKDF-SHA256 + AES-256-GCM), live session streaming, and webhook notifications. Zero npm dependencies.
 - **relay** — a zero-knowledge forwarder (matches daemon↔client by `daemonId`, forwards opaque encrypted frames, holds no keys). Runs as a Cloudflare Worker or a single Node process.
 - **web** — the phone-side page (vanilla JS + WebCrypto, no build step; falls back to a pure-JS X25519 when the browser engine lacks it).
-- **shell** — a thin native menu-bar app. A pure view: the daemon runs as an independent launchd LaunchAgent, and the shell shells out to `cxx-daemon <subcommand>` per action (pair, devices, notifications, enable/disable) — quitting the tray leaves remote running. Its UI follows the system language (Chinese or English). macOS first; Windows/Linux to follow.
+- **shell** — a thin native menu-bar / tray app (macOS Swift, Windows tray). A pure view: the daemon is owned by the OS keepalive service (launchd / Task Scheduler), and the shell shells out to `cxx-daemon <subcommand>` per action — quitting the tray leaves remote running. **Linux has no shell**: the same `cxx` CLI plus a systemd `--user` unit.
 
 Everything is end-to-end encrypted: the daemon holds a long-term key whose public half ships with the pairing code; each phone connection generates an ephemeral key, both sides derive the session key independently, and the relay only ferries ciphertext it can't read. Full protocol in [public/PROTOCOL.md](./public/PROTOCOL.md).
 
@@ -209,9 +240,16 @@ Notifications go through a webhook — Slack / Telegram / Discord via a custom w
 </details>
 
 <details>
-<summary><b>macOS only? Do iOS / Android work?</b></summary>
+<summary><b>Which desktop OSes? Do iOS / Android work?</b></summary>
 
-The phone side is a web page, so **any phone browser (including a messenger's in-app browser) works** — iOS and Android alike. Today you need a **macOS** computer to run the menu-bar app + daemon; Windows / Linux shells are planned, and the daemon and protocol are already cross-platform.
+The phone side is a web page, so **any phone browser (including a messenger's in-app browser) works** — iOS and Android alike. On the computer: **macOS / Windows** ship a tray shell + daemon; **Linux is CLI + systemd user service** (no tray/GUI), aimed at servers and multi-agent hosts. The daemon and protocol are cross-platform.
+
+</details>
+
+<details>
+<summary><b>On Linux, does the daemon stop when SSH disconnects?</b></summary>
+
+By default a systemd **user** unit may stop when the last session ends. To keep it running after logout, run `loginctl enable-linger $USER` once. Logs live at `~/.cxx/remote/daemon.log`.
 
 </details>
 
@@ -238,14 +276,16 @@ Every device (isolated by browser + site — each of Chrome / Firefox / an in-ap
 
 ## 📦 More
 
-### 🔨 Building the macOS app
+### 🔨 Building
 
 ```bash
-npm run build:app                  # assembles dist/CXX.app (daemon + menu-bar shell, ad-hoc signed)
-node scripts/build-app.mjs --dmg   # also produce a DMG
+npm run build:app                  # macOS: assembles dist/CXX.app (daemon + menu-bar shell, ad-hoc signed)
+node scripts/build-app.mjs --dmg   # macOS: also produce a DMG
+npm run build:sea                  # platform SEA binary → dist/sea/cxx-daemon (or .exe on Windows)
+npm run build:linux                # alias of build:sea for Linux release builds
 ```
 
-The first build downloads an official Node runtime (Homebrew's node lacks the SEA fuse) and caches it under `dist/.node-cache`. See [shell/macos/README.md](./shell/macos/README.md) for dev-run instructions and the shell↔daemon backend-subcommand contract.
+The first SEA build downloads an official Node runtime (Homebrew's node lacks the SEA fuse) and caches it under `dist/.node-cache`. See [shell/macos/README.md](./shell/macos/README.md) for macOS dev-run instructions and the shell↔daemon backend-subcommand contract.
 
 ### 🤝 Relationship to the official projects
 

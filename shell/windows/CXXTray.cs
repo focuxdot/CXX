@@ -400,6 +400,7 @@ namespace CXX
                 AddItem(m, I18n.L("扫码配对手机...", "Pair phone with QR..."), delegate { DoPair(); });
             }
             m.Items.Add(new ToolStripSeparator());
+            AddItem(m, I18n.L("检查更新...", "Check for updates..."), delegate { DoCheckUpdate(); });
             AddItem(m, I18n.L("反馈问题", "Report an issue"), delegate { DoReportIssue(); });
             AddItem(m, enabled ? I18n.L("退出托盘（远程继续运行）", "Quit tray (remote keeps running)") : I18n.L("退出托盘", "Quit tray"), delegate { DoQuit(); });
         }
@@ -501,6 +502,62 @@ namespace CXX
             tray.Visible = false;
             tray.Dispose();
             ExitThread();
+        }
+
+        // 检查更新：daemon 的 check-update 查 GitHub 最新 release（网络最长 8 秒），
+        // 放后台线程避免卡托盘菜单；MessageBox 跨线程弹是安全的。
+        void DoCheckUpdate()
+        {
+            var t = new Thread(delegate()
+            {
+                var res = Backend.Call("check-update");
+                string page = Backend.Str(res, "url") ?? "https://github.com/focuxdot/CXX/releases/latest";
+                string current = Backend.Str(res, "current") ?? "?";
+                string err = Backend.Str(res, "error");
+                // 成功响应必带 latest；两者皆无 = daemon 没吐 JSON（版本过旧不认识
+                // check-update、或启动即崩，Backend.Call 都返回空字典）——不能当"已是最新"。
+                if (err == null && Backend.Str(res, "latest") == null)
+                    err = I18n.L("后台服务没有返回检查结果（可能版本过旧或未能启动）。",
+                                 "The background service returned no result (it may be outdated or failed to start).");
+                if (err != null)
+                {
+                    var r = MessageBox.Show(
+                        err + "\n\n" + I18n.L("是否打开发布页手动查看？", "Open the releases page to check manually?"),
+                        I18n.L("检查更新失败", "Update check failed"),
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                    if (r == DialogResult.Yes) OpenUrl(page);
+                    return;
+                }
+                string latest = Backend.Str(res, "latest") ?? "?";
+                if (Backend.Bool(res, "update"))
+                {
+                    var r = MessageBox.Show(
+                        I18n.L("最新版本 v", "Latest is v") + latest + I18n.L("，当前 v", "; you have v") + current + I18n.L("。是否前往下载？", ". Download now?"),
+                        I18n.L("发现新版本", "Update available"),
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+                    if (r == DialogResult.Yes) OpenUrl(page);
+                }
+                else
+                {
+                    MessageBox.Show(
+                        I18n.L("当前 v", "v") + current + I18n.L(" 就是最新版本。", " is the latest version."),
+                        I18n.L("已是最新版本", "Up to date"),
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }) { IsBackground = true };
+            t.Start();
+        }
+
+        void OpenUrl(string url)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message + "\n\n" + url, I18n.L("无法打开链接", "Could not open link"));
+            }
         }
 
         void DoReportIssue()

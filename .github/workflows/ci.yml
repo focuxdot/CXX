@@ -42,9 +42,22 @@ jobs:
       - name: Syntax check
         run: |
           node --check daemon/src/main.mjs
+          node --check daemon/src/linux-agent.mjs
           node --check daemon/src/codex-version.mjs
           node --check scripts/check-schema.mjs
           node --check scripts/smoke.mjs
+      - name: Unit tests (platform agents + pure modules)
+        run: |
+          node --test \
+            test/linux-agent.test.mjs \
+            test/win-agent.test.mjs \
+            test/menu-backend-win.test.mjs \
+            test/proc-reap.test.mjs \
+            test/version.test.mjs \
+            test/relay-link.test.mjs \
+            test/codex-path.test.mjs \
+            test/qr-bmp.test.mjs \
+            test/file-search.test.mjs
       - name: Schema drift (offline, deterministic)
         run: npm run check:schema
       - name: End-to-end smoke (relay + daemon + real codex app-server)

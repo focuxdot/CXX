@@ -90,6 +90,11 @@ rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
 // 1. bundle ESM -> single CJS. --format=cjs is required: SEA runs the main as CommonJS.
+// The SEA binary carries no package.json, so the version is burned in here via define
+// (consumed by daemon/src/version.mjs for the tray "check update" comparison).
+const pkgVersion =
+  process.env.CXX_VERSION ||
+  JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
 console.log("→ bundling daemon with esbuild ...");
 runNpx([
   "--yes",
@@ -99,6 +104,7 @@ runNpx([
   "--platform=node",
   "--format=cjs",
   "--target=node22",
+  `--define:__CXX_VERSION__=${JSON.stringify(pkgVersion)}`,
   `--outfile=${bundlePath}`,
 ]);
 

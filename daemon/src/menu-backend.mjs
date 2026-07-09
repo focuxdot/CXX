@@ -12,7 +12,7 @@
 // via config-watch.mjs (fs.watch + stat poll) and per-auth re-reads. No socket/IPC.
 //
 // Protocol:
-//   status        -> { enabled, running, deviceCount, notifierCount, relay }
+//   status        -> { enabled, running, deviceCount, notifierCount, relay, version }
 //   enable        -> { ok, enabled, error? }     (platform hook)
 //   disable       -> { ok, enabled }             (platform hook)
 //   pair          -> { url } | { error }         (#d= permanent device link)
@@ -25,6 +25,7 @@
 //   notify-remove <index>       -> { ok }
 //   notify-test [inputFile]     -> { ok, count }     (tests the unsaved entry in inputFile)
 //   notify-test-index <index>   -> { ok, count }     (tests the saved channel at index)
+//   check-update  -> { ok, current, latest, update, url } | { error, current, url }
 import { existsSync, readFileSync } from "node:fs";
 import { platform, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -39,6 +40,7 @@ import {
 } from "./config.mjs";
 import { Notifier, normalizeNotifier, redact } from "./notify.mjs";
 import { writeQrBmp } from "./qr-bmp.mjs";
+import { compareVersions, cxxVersion } from "./version.mjs";
 
 export function status(deps) {
   const config = existsSync(deps.configPath) ? loadOrCreateConfig(deps.configPath) : null;
@@ -48,7 +50,45 @@ export function status(deps) {
     deviceCount: config?.devices?.length ?? 0,
     notifierCount: config?.notifiers?.length ?? 0,
     relay: config?.relayUrl ?? "",
+    version: cxxVersion(),
   };
+}
+
+// —— 检查更新 ——
+// 查 GitHub Releases 最新 tag 与自身版本比对。托盘只拿结论：update 为真就引导去下载页。
+// 网络失败（超时/离线/被墙）返回 error + 发布页兜底链接，托盘可让用户手动打开看看。
+const RELEASES_API = "https://api.github.com/repos/focuxdot/CXX/releases/latest";
+const RELEASES_PAGE = "https://github.com/focuxdot/CXX/releases/latest";
+
+// 纯函数：把 API 响应整形成托盘要的结论（单测覆盖这里，网络层不掺和）。
+export function shapeUpdateResult(current, release) {
+  const latest = String(release?.tag_name ?? "").replace(/^v/i, "");
+  if (!latest) return { error: "响应里没有版本号（tag_name 缺失）", current, url: RELEASES_PAGE };
+  return {
+    ok: true,
+    current,
+    latest,
+    update: compareVersions(latest, current) > 0,
+    url: release?.html_url || RELEASES_PAGE,
+  };
+}
+
+export async function checkUpdate(deps, { fetchImpl = fetch, timeoutMs = 8000 } = {}) {
+  const current = cxxVersion();
+  try {
+    const res = await fetchImpl(RELEASES_API, {
+      headers: {
+        "User-Agent": `cxx/${current}`,
+        Accept: "application/vnd.github+json",
+      },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) return { error: `GitHub 返回 HTTP ${res.status}`, current, url: RELEASES_PAGE };
+    return shapeUpdateResult(current, await res.json());
+  } catch (err) {
+    const msg = err?.name === "TimeoutError" ? "请求超时" : (err?.message ?? String(err));
+    return { error: msg, current, url: RELEASES_PAGE };
+  }
 }
 
 // 永久链接：内嵌长期设备令牌，扫码/点击即永久连接（可在「已配对设备」撤销）
@@ -172,7 +212,7 @@ export async function notifyTestIndex(deps, index) {
   return { ok: true, count: notifier.count };
 }
 
-// —— CLI 分发 —— enable/disable 走平台钩子（mac-agent），其余纯 config 逻辑。
+// —— CLI 分发 —— enable/disable 走平台钩子（mac/win/linux-agent），其余纯 config 逻辑。
 export async function runMenuCommand(command, rest, deps) {
   switch (command) {
     case "status": return status(deps);
@@ -188,6 +228,7 @@ export async function runMenuCommand(command, rest, deps) {
     case "notify-remove": return notifyRemove(deps, Number(rest[0]));
     case "notify-test": return notifyTest(deps, rest[0] ? JSON.parse(readFileSync(rest[0], "utf8")) : undefined);
     case "notify-test-index": return notifyTestIndex(deps, Number(rest[0]));
+    case "check-update": return checkUpdate(deps);
     default: return null; // not a menu command
   }
 }
@@ -195,4 +236,5 @@ export async function runMenuCommand(command, rest, deps) {
 export const MENU_COMMANDS = new Set([
   "status", "enable", "disable", "pair", "pair-once", "devices",
   "revoke", "prune-unused", "notify-list", "notify-add", "notify-remove", "notify-test", "notify-test-index",
+  "check-update",
 ]);
