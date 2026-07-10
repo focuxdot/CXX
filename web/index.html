@@ -218,6 +218,85 @@ try {
   .sheetnote { font-size: 12px; color: var(--dim); padding: 10px 10px 0; line-height: 1.6; }
   .drow .ddot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
   .drow.active .ddot { background: var(--ok); }
+  /* 快捷指令设置：底部 sheet 重做——分组卡片、iOS 拨动开关、粘底操作栏，中英成对编辑 */
+  #quickcommandssheet.open { animation: qcfade .2s ease both; }
+  #quickcommandssheet.open .sheetbox { animation: qcrise .3s cubic-bezier(.22,.61,.36,1) both; }
+  @keyframes qcfade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes qcrise { from { transform: translateY(16px); opacity: .3; } to { transform: translateY(0); opacity: 1; } }
+  .quickbox { max-height: 84vh; padding-bottom: 0; }
+  .sheetgrab { width: 36px; height: 4px; border-radius: 999px; background: var(--border);
+               margin: 0 auto 14px; }
+  .quickhead { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+  .quickheadtext { flex: 1; min-width: 0; }
+  .quicktitle { font-size: 20px; font-weight: 700; color: var(--text); }
+  .quicksub { margin-top: 5px; font-size: 12.5px; line-height: 1.55; color: var(--dim); }
+  .quickclose { flex: none; width: 32px; height: 32px; border: none; border-radius: 50%;
+                background: var(--sunken); color: var(--dim); cursor: pointer; display: flex;
+                align-items: center; justify-content: center; }
+  .quickclose:active { background: var(--border); color: var(--text); }
+  .quickclose svg { width: 18px; height: 18px; }
+  /* 启用开关：卡片承载，右侧 iOS 拨动开关 */
+  .quicktoggle { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+                 padding: 13px 14px; border-radius: 14px; background: var(--sunken);
+                 color: var(--text); cursor: pointer; }
+  .quicktoggletitle { font-size: 15px; font-weight: 600; }
+  .qswitch { position: relative; flex: none; width: 46px; height: 28px; }
+  .qswitch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
+                   opacity: 0; cursor: pointer; }
+  .qtrack { position: absolute; inset: 0; border-radius: 999px; background: var(--border);
+            transition: background .2s ease; }
+  .qthumb { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%;
+            background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.35); transition: transform .2s ease; }
+  .qswitch input:checked ~ .qtrack { background: var(--accent); }
+  .qswitch input:checked ~ .qthumb { transform: translateX(18px); }
+  .qswitch input:focus-visible ~ .qtrack { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* 列表小标题 + 计数 */
+  .quicklisthead { display: flex; align-items: baseline; justify-content: space-between;
+                   margin: 20px 2px 10px; font-size: 12px; letter-spacing: .6px; color: var(--dim); }
+  .quickcount { font-variant-numeric: tabular-nums; }
+  .quicklist { display: grid; gap: 10px; }
+  .quickempty { padding: 20px 10px; text-align: center; font-size: 13px; color: var(--dim);
+                border: 1px dashed var(--border); border-radius: 12px; }
+  /* 指令卡：整行一个输入框（当前语言）+ 右侧删除图标 */
+  .quickitem { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px;
+               border: 1px solid var(--border); border-radius: 14px; padding: 4px 6px 4px 14px;
+               background: var(--raised); cursor: text; }
+  .quickitem:focus-within { border-color: var(--accent); }
+  .quickfield { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .quickfield input { flex: 1; min-width: 0; box-sizing: border-box; border: none; background: none;
+                      color: var(--text); padding: 12px 0; font: inherit; font-size: 15px; }
+  .quickfield input:focus { outline: none; }
+  .quickfield input::placeholder { color: var(--dim); opacity: .55; }
+  .qcount { flex: none; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums;
+            opacity: 0; transition: opacity .15s; }
+  .quickfield input:focus ~ .qcount { opacity: 1; }
+  .qcount.warn { color: var(--warn); opacity: 1; }
+  .quickdelete { flex: none; width: 34px; height: 34px; border: none; border-radius: 10px;
+                 background: none; color: var(--dim); cursor: pointer; display: flex;
+                 align-items: center; justify-content: center; }
+  .quickdelete:active { background: var(--sunken); color: var(--err); }
+  .quickdelete svg { width: 18px; height: 18px; }
+  /* 添加：虚线卡片 + 图标，达上限置灰 */
+  .quickadd { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%;
+              margin-top: 10px; padding: 11px 12px; border: 1px dashed var(--border);
+              border-radius: 12px; background: none; color: var(--accent); font: inherit;
+              font-size: 14px; font-weight: 500; cursor: pointer; }
+  .quickadd:active { background: var(--accent-bg); }
+  .quickadd:disabled { color: var(--dim); cursor: not-allowed; opacity: .55; }
+  .quickadd svg { width: 17px; height: 17px; }
+  .quickerror { min-height: 16px; margin: 10px 2px 0; color: var(--err); font-size: 12px;
+                line-height: 1.5; }
+  /* 粘底操作栏：内容在其下滚动，顶部渐隐过渡 */
+  .quickactions { position: sticky; bottom: 0; z-index: 1; display: flex; gap: 10px; margin-top: 10px;
+                  padding: 12px 0 calc(18px + env(safe-area-inset-bottom)); background: var(--raised); }
+  .quickactions::before { content: ""; position: absolute; left: 0; right: 0; top: -18px; height: 18px;
+                          background: linear-gradient(to top, var(--raised), transparent);
+                          pointer-events: none; }
+  .quickactions button { flex: 1; border: none; border-radius: 12px; padding: 13px 15px; font: inherit;
+                         font-size: 15px; font-weight: 600; cursor: pointer; background: var(--sunken);
+                         color: var(--text); }
+  .quickactions button:active { opacity: .8; }
+  .quickactions .quicksave { background: var(--accent); color: #fff; }
   #diaglist { padding: 4px 2px 2px; }
   .diagchain { padding: 12px 4px 4px; }
   .diagsteps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -539,6 +618,16 @@ try {
               background: var(--bg);
               padding: 6px 10px calc(10px + env(safe-area-inset-bottom)); }
   #composer.active { display: block; }
+  /* 快捷指令：只在用户主动打开后，才在输入卡片上方露出一排可横滑的快捷发送项 */
+  #quickcommandbar { display: none; gap: 8px; max-width: 760px; margin: 0 auto 6px;
+                     padding: 0 2px; overflow-x: auto; scrollbar-width: none; }
+  #quickcommandbar.on { display: flex; }
+  #quickcommandbar::-webkit-scrollbar { display: none; }
+  .quickcommand { flex: none; max-width: 180px; overflow: hidden; text-overflow: ellipsis;
+                  white-space: nowrap; border: 1px solid var(--border); background: var(--raised);
+                  color: var(--text); border-radius: 16px; padding: 6px 13px; font: inherit;
+                  font-size: 14px; cursor: pointer; }
+  .quickcommand:active { background: var(--border); }
   .chip { flex: none; border: 1px solid var(--border); background: var(--raised); color: var(--text);
           border-radius: 15px; padding: 5px 13px; font-size: 14px; cursor: pointer; }
   .chip:active { background: var(--border); }
@@ -747,6 +836,7 @@ try {
   <hr class="m-full m-list">
   <div class="mlabel m-session-label" data-i18n="menu.session">会话</div>
   <button data-act="archive-session" class="m-session"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/></svg><span data-i18n="menu.archive_session">归档当前会话</span></button>
+  <button data-act="quick-commands" class="m-session"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v10H8l-4 4z"/><path d="M8 9h8"/><path d="M8 12h5"/></svg><span data-i18n="menu.quick_commands">快捷指令</span></button>
   <hr class="m-session-sep">
   <div class="mlabel" data-i18n="menu.appearance">外观</div>
   <div class="mseg" role="group" data-i18n-aria="menu.appearance" aria-label="外观">
@@ -804,6 +894,38 @@ try {
   <div class="sheetbox">
     <div class="sheethead" data-i18n="sheet.share">分享围观</div>
     <div id="sharelist"></div>
+  </div>
+</div>
+<div id="quickcommandssheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="quickcommandstitle">
+  <div class="sheetbox quickbox">
+    <div class="sheetgrab" aria-hidden="true"></div>
+    <div class="quickhead">
+      <div class="quickheadtext">
+        <div id="quickcommandstitle" class="quicktitle" data-i18n="sheet.quick_commands">快捷指令</div>
+        <div class="quicksub" data-i18n="quick.note">点击快捷项即可直接发送</div>
+      </div>
+      <button id="quickcommandclose" class="quickclose" type="button" data-i18n-aria="common.close" aria-label="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <label class="quicktoggle">
+      <span class="quicktoggletitle" data-i18n="quick.enabled">打开快捷指令</span>
+      <span class="qswitch"><input id="quickcommandsenabled" type="checkbox"><span class="qtrack"></span><span class="qthumb"></span></span>
+    </label>
+    <div class="quicklisthead">
+      <span data-i18n="quick.section">指令列表</span>
+      <span id="quickcommandcount" class="quickcount"></span>
+    </div>
+    <div id="quickcommandlist" class="quicklist"></div>
+    <button id="quickcommandadd" class="quickadd" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      <span data-i18n="quick.add">添加快捷指令</span>
+    </button>
+    <div id="quickcommanderror" class="quickerror" role="alert"></div>
+    <div class="quickactions">
+      <button id="quickcommandcancel" type="button" data-i18n="common.cancel">取消</button>
+      <button id="quickcommandsave" class="quicksave" type="button" data-i18n="common.save">保存</button>
+    </div>
   </div>
 </div>
 <div id="projectsheet" class="sheet">
@@ -883,6 +1005,7 @@ try {
     <button data-act="photos"><span class="mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></span><span data-i18n="plus.photos">选照片</span></button>
     <button data-act="paste"><span class="mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg></span><span data-i18n="plus.paste">粘贴图片</span></button>
   </div>
+  <div id="quickcommandbar" data-i18n-aria="a11y.quick_commands" aria-label="快捷指令"></div>
   <div id="card">
     <div id="attachrow"></div>
     <div id="suggest"></div>
@@ -959,6 +1082,7 @@ const I18N = {
     "a11y.model": "模型选择",
     "a11y.stop": "停止",
     "a11y.send": "发送",
+    "a11y.quick_commands": "快捷指令",
     "a11y.copyoutput": "复制输出",
     "a11y.forksession": "打分支",
     "status.connecting": "连接中…",
@@ -969,6 +1093,7 @@ const I18N = {
     "menu.diag": "连接状态",
     "menu.session": "会话",
     "menu.archive_session": "归档当前会话",
+    "menu.quick_commands": "快捷指令",
     "organize.proj": "按项目",
     "organize.time": "时间线",
     "theme.auto": "跟随系统",
@@ -980,6 +1105,21 @@ const I18N = {
     "sheet.perm": "权限（对之后从手机发出的消息生效）",
     "sheet.model": "模型与推理力度",
     "sheet.share": "分享围观",
+    "sheet.quick_commands": "快捷指令",
+    "quick.enabled": "打开快捷指令",
+    "quick.note": "点击快捷项即可直接发送",
+    "quick.section": "指令列表",
+    "quick.placeholder": "输入快捷指令",
+    "quick.add": "添加快捷指令",
+    "quick.zh": "中文指令",
+    "quick.en": "English 指令",
+    "quick.remove": "删除",
+    "quick.empty": "还没有快捷指令",
+    "quick.invalid": "每个快捷指令都需要中文和 English 内容，且不能超过 80 个字符。",
+    "quick.limit": "最多可添加 8 条快捷指令。",
+    "quick.save_failed": "保存失败，请检查浏览器存储权限。",
+    "quick.send_aria": "发送快捷指令：{0}",
+    "common.save": "保存",
     "list.loading": "加载会话列表…",
     "replay.more": "继续加载…",
     "search.ph": "搜索会话…",
@@ -1200,6 +1340,7 @@ const I18N = {
     "project.actions.title": "项目操作",
     "common.copy": "复制",
     "common.cancel": "取消",
+    "common.close": "关闭",
     "common.archive": "归档",
     "toast.linkcopied": "围观链接已复制",
     "toast.copyfail": "复制失败",
@@ -1268,6 +1409,7 @@ const I18N = {
     "a11y.model": "Choose model",
     "a11y.stop": "Stop",
     "a11y.send": "Send",
+    "a11y.quick_commands": "Quick commands",
     "a11y.copyoutput": "Copy output",
     "a11y.forksession": "Fork session",
     "status.connecting": "Connecting…",
@@ -1278,6 +1420,7 @@ const I18N = {
     "menu.diag": "Connection",
     "menu.session": "Session",
     "menu.archive_session": "Archive current session",
+    "menu.quick_commands": "Quick commands",
     "organize.proj": "Project",
     "organize.time": "Timeline",
     "theme.auto": "System",
@@ -1289,6 +1432,21 @@ const I18N = {
     "sheet.perm": "Approvals (apply to messages sent from your phone)",
     "sheet.model": "Model & reasoning effort",
     "sheet.share": "Share (read-only)",
+    "sheet.quick_commands": "Quick commands",
+    "quick.enabled": "Enable quick commands",
+    "quick.note": "Tap a command to send it instantly",
+    "quick.section": "Commands",
+    "quick.placeholder": "Enter a command",
+    "quick.add": "Add quick command",
+    "quick.zh": "Chinese command",
+    "quick.en": "English command",
+    "quick.remove": "Delete",
+    "quick.empty": "No quick commands yet",
+    "quick.invalid": "Every quick command needs Chinese and English text, each up to 80 characters.",
+    "quick.limit": "You can add up to 8 quick commands.",
+    "quick.save_failed": "Couldn't save. Check your browser storage permission.",
+    "quick.send_aria": "Send quick command: {0}",
+    "common.save": "Save",
     "list.loading": "Loading sessions…",
     "replay.more": "Load more…",
     "search.ph": "Search sessions…",
@@ -1509,6 +1667,7 @@ const I18N = {
     "project.actions.title": "Project actions",
     "common.copy": "Copy",
     "common.cancel": "Cancel",
+    "common.close": "Close",
     "common.archive": "Archive",
     "toast.linkcopied": "Viewer link copied",
     "toast.copyfail": "Copy failed",
@@ -3439,6 +3598,7 @@ function applyLang(mode) {
   LANG = resolveLang();
   document.documentElement.lang = LANG === "zh" ? "zh-CN" : "en";
   applyStaticI18n();
+  renderQuickCommandBar();
   updateLangChecks();
   updateStatusPill(); // applyStaticI18n 重置了输入框占位为写死的 ChatGPT 串，按当前 agent 复位
   if (app.view === "list") renderList();
@@ -3452,6 +3612,175 @@ function updateLangChecks() {
 function updateMenuState() {
   const archive = document.querySelector('#topmenu button[data-act="archive-session"]');
   if (archive) archive.disabled = app.view !== "session" || isDraftSession() || app.isViewer;
+}
+
+// —— 快捷指令：纯前端偏好，一份普通文本列表，不扩展 daemon 协议 ——
+// 语言只决定"从没保存过时"给哪套默认项（可以/继续 vs OK/Continue）；用户一旦编辑保存，
+// 就是与语言无关的一份列表，切换界面语言不再改动它。
+const QUICK_COMMANDS_KEY = "czr-quick-commands";
+const QUICK_COMMANDS_MAX = 8;
+const QUICK_COMMANDS_TEXT_MAX = 80;
+let quickCommandsDraft = null;
+
+function newQuickCommandId() {
+  return globalThis.crypto?.randomUUID?.() || `quick-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// 默认项随当前语言给几个固定建议——只在本地无存档时使用，且未保存前不落盘。
+function defaultQuickCommands() {
+  const items = LANG === "zh"
+    ? [{ id: "ok", text: "可以" }, { id: "continue", text: "继续" }]
+    : [{ id: "ok", text: "OK" }, { id: "continue", text: "Continue" }];
+  return { version: 2, enabled: false, items };
+}
+
+// 兼容旧的 {zh,en} 成对结构：合并成单一 text（优先当前语言，回落另一语言）。
+function quickItemText(item) {
+  if (typeof item?.text === "string") return item.text;
+  if (typeof item?.[LANG] === "string" && item[LANG].trim()) return item[LANG];
+  const other = LANG === "zh" ? "en" : "zh";
+  if (typeof item?.[other] === "string") return item[other];
+  return "";
+}
+
+function copyQuickCommands(value) {
+  return {
+    version: 2,
+    enabled: !!value?.enabled,
+    items: (value?.items || []).map((item) => ({
+      id: typeof item?.id === "string" && item.id ? item.id : newQuickCommandId(),
+      text: quickItemText(item),
+    })),
+  };
+}
+
+function loadQuickCommands() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(QUICK_COMMANDS_KEY) || "null");
+    if (saved && Array.isArray(saved.items)) return copyQuickCommands(saved);
+  } catch {}
+  return copyQuickCommands(defaultQuickCommands());
+}
+
+function saveQuickCommands(value) {
+  localStorage.setItem(QUICK_COMMANDS_KEY, JSON.stringify(copyQuickCommands(value)));
+}
+
+function quickCommandText(item) {
+  return String(item?.text || "").trim();
+}
+
+function renderQuickCommandBar() {
+  const bar = $("quickcommandbar");
+  if (!bar) return;
+  bar.innerHTML = "";
+  const settings = loadQuickCommands();
+  const show = !app?.isViewer && app?.view === "session" && settings.enabled;
+  bar.classList.toggle("on", show && settings.items.length > 0);
+  if (!show) return;
+  for (const item of settings.items) {
+    const text = quickCommandText(item);
+    if (!text) continue;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "quickcommand";
+    button.textContent = text;
+    button.title = text;
+    button.setAttribute("aria-label", t("quick.send_aria", text));
+    button.onclick = () => { sendQuickCommand(text).catch(() => {}); };
+    bar.appendChild(button);
+  }
+  bar.classList.toggle("on", bar.childElementCount > 0);
+}
+
+async function sendQuickCommand(text) {
+  const command = String(text || "").trim();
+  if (!command || app.isViewer || app.view !== "session" || !app.currentId) return;
+  if (net.link !== "ok" || net.daemon === false) {
+    showBanner(t("banner.offline_send"));
+    return;
+  }
+  // 不借 input/sendMessage：用户正在编辑的草稿和附件必须原样保留。
+  if (app.running && app.driver === "daemon") enqueue(command, []);
+  else await dispatch(command, []);
+}
+
+function renderQuickCommandsSheet() {
+  const list = $("quickcommandlist");
+  const enabled = $("quickcommandsenabled");
+  const error = $("quickcommanderror");
+  if (!quickCommandsDraft || !list || !enabled || !error) return;
+  enabled.checked = quickCommandsDraft.enabled;
+  error.textContent = "";
+  list.innerHTML = "";
+  const count = $("quickcommandcount");
+  if (count) count.textContent = `${quickCommandsDraft.items.length}/${QUICK_COMMANDS_MAX}`;
+  if (!quickCommandsDraft.items.length) {
+    const empty = document.createElement("div");
+    empty.className = "quickempty";
+    empty.textContent = t("quick.empty");
+    list.appendChild(empty);
+  }
+  quickCommandsDraft.items.forEach((item, index) => {
+    const row = document.createElement("label");
+    row.className = "quickitem";
+    const field = document.createElement("div");
+    field.className = "quickfield";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.maxLength = QUICK_COMMANDS_TEXT_MAX;
+    input.value = item.text || "";
+    input.placeholder = t("quick.placeholder");
+    const counter = document.createElement("span");
+    counter.className = "qcount";
+    const paint = () => {
+      counter.textContent = `${input.value.length}/${QUICK_COMMANDS_TEXT_MAX}`;
+      counter.classList.toggle("warn", input.value.length >= QUICK_COMMANDS_TEXT_MAX);
+    };
+    paint();
+    input.addEventListener("input", () => { quickCommandsDraft.items[index].text = input.value; paint(); });
+    field.append(input, counter);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "quickdelete";
+    remove.setAttribute("aria-label", t("quick.remove"));
+    remove.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg>';
+    remove.onclick = () => {
+      quickCommandsDraft.items.splice(index, 1);
+      renderQuickCommandsSheet();
+    };
+    row.append(field, remove);
+    list.appendChild(row);
+  });
+  $("quickcommandadd").disabled = quickCommandsDraft.items.length >= QUICK_COMMANDS_MAX;
+}
+
+function openQuickCommandsSheet() {
+  quickCommandsDraft = loadQuickCommands();
+  renderQuickCommandsSheet();
+  $("quickcommandssheet").classList.add("open");
+}
+
+function closeQuickCommandsSheet() {
+  quickCommandsDraft = null;
+  $("quickcommandssheet").classList.remove("open");
+}
+
+function saveQuickCommandsSheet() {
+  if (!quickCommandsDraft) return;
+  // 一份普通列表：留有内容的条目，空白项直接忽略（不再当作错误）。
+  const items = quickCommandsDraft.items
+    .map((item) => ({ id: item.id || newQuickCommandId(), text: String(item.text || "").trim() }))
+    .filter((item) => item.text);
+  const clean = copyQuickCommands({ version: 2, enabled: quickCommandsDraft.enabled, items });
+  try {
+    saveQuickCommands(clean);
+  } catch {
+    $("quickcommanderror").textContent = t("quick.save_failed");
+    return;
+  }
+  closeQuickCommandsSheet();
+  renderQuickCommandBar();
 }
 
 // 归一路径分隔符为 /、去尾分隔符，让同一套规则同时匹配 Windows(\) 与 POSIX(/)。
@@ -4442,6 +4771,7 @@ async function openSession(id, title, opts = {}) {
   $("list").classList.add("hidden");
   $("viewer").classList.add("active");
   $("composer").classList.add("active");
+  renderQuickCommandBar();
   if (!app.isViewer) $("back").style.display = "flex";
   setTitle(title);
   updateStatusPill(); // 副标题切到「项目文件夹 · 电脑名」
@@ -4528,6 +4858,7 @@ async function closeSession() {
   document.body.classList.remove("insession");
   $("viewer").classList.remove("active");
   $("composer").classList.remove("active");
+  renderQuickCommandBar();
   $("log").innerHTML = "";
   $("list").classList.remove("hidden");
   $("back").style.display = "none";
@@ -7499,8 +7830,6 @@ function renderShareSheet(links, freshUrl) {
   }
 }
 
-// 快捷回复：覆盖手机上最常见的三种指示，点选即发，免打字（仅空闲时显示）
-
 function renderOnboarding() {
   $("list").innerHTML = `
     <div class="onboard">
@@ -7597,6 +7926,23 @@ async function main() {
   $("modelbtn").onclick = openModelSheet;
   $("permsheet").onclick = (e) => { if (e.target === $("permsheet")) $("permsheet").classList.remove("open"); };
   $("modelsheet").onclick = (e) => { if (e.target === $("modelsheet")) $("modelsheet").classList.remove("open"); };
+  $("quickcommandsenabled").onchange = () => {
+    if (quickCommandsDraft) quickCommandsDraft.enabled = $("quickcommandsenabled").checked;
+  };
+  $("quickcommandadd").onclick = () => {
+    if (!quickCommandsDraft) return;
+    if (quickCommandsDraft.items.length >= QUICK_COMMANDS_MAX) {
+      $("quickcommanderror").textContent = t("quick.limit");
+      return;
+    }
+    quickCommandsDraft.items.push({ id: newQuickCommandId(), text: "" });
+    renderQuickCommandsSheet();
+    $("quickcommandlist").lastElementChild?.querySelector("input")?.focus();
+  };
+  $("quickcommandcancel").onclick = closeQuickCommandsSheet;
+  $("quickcommandclose").onclick = closeQuickCommandsSheet;
+  $("quickcommandsave").onclick = saveQuickCommandsSheet;
+  $("quickcommandssheet").onclick = (e) => { if (e.target === $("quickcommandssheet")) closeQuickCommandsSheet(); };
   // 桌面（精确指针）Enter 发送、Shift+Enter 换行；手机键盘 Enter 保持换行；中文输入法合成中不触发
   $("input").addEventListener("keydown", (e) => {
     // 建议面板打开时接管方向/回车/Tab/Esc（先于"回车发送"）
@@ -7675,6 +8021,7 @@ async function main() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && $("confirmsheet").classList.contains("open")) closeConfirmSheet(false);
     else if (e.key === "Escape" && $("projectsheet").classList.contains("open")) closeProjectActions();
+    else if (e.key === "Escape" && $("quickcommandssheet").classList.contains("open")) closeQuickCommandsSheet();
   });
   // 观众喝彩：枚举表情，前端 300ms 防抖（服务端另有令牌桶）；渲染靠广播回流，双端一致
   const EMOJI = ["👏", "🔥", "❤️", "😂", "🤯"];
@@ -7739,6 +8086,9 @@ async function main() {
       applyLang(act.slice(5));
     } else if (act === "archive-session") {
       archiveCurrentSession();
+    } else if (act === "quick-commands") {
+      $("topmenu").classList.remove("open");
+      openQuickCommandsSheet();
     } else if (act === "pc") {
       $("topmenu").classList.remove("open");
       openSheet();
