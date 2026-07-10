@@ -120,7 +120,9 @@ try {
   #status.down::before { background: var(--err); }
   /* 局域网直连 WiFi 图标：stroke 用 currentColor，颜色随所在文本（副标题/诊断标题）走 */
   .wifiico { width: 1em; height: 1em; vertical-align: -0.15em; }
-  #status .wifiico { margin-left: 4px; }
+  /* 直连时顶掉左侧在线绿点：同一位置换成绿色 WiFi 图标，一眼看出走的是直连 */
+  #status.direct::before { content: none; }
+  #status.direct .wifiico { color: var(--ok); margin-right: 5px; }
   .diagtitle .wifiico { margin-right: 4px; }
   #agentpick { flex: none; display: none; position: relative; align-items: center; }
   #agentpick .agentbtn { display: flex; align-items: center; gap: 6px; height: 36px;
@@ -3561,7 +3563,7 @@ function updateStatusPill() {
   const el = $("status");
   el.className = "";
   // 直连活着时电脑必然可达：中继层的断连/离线信号不该盖过它（外网抖断、直连照常干活
-  // 正是直连的价值场景）。⚡ 让"当前走哪条路"肉眼可见。
+  // 正是直连的价值场景）。直连时左侧绿点换成绿色 WiFi 图标，"当前走哪条路"肉眼可见。
   if (net.direct || net.daemon === true) {
     if (!net.direct && net.link === "connecting") {
       el.textContent = t("status.connecting");
@@ -3576,8 +3578,8 @@ function updateStatusPill() {
       const dir = sessionDirLabel();
       const pc = app.session?.info.name || t("status.connected");
       el.textContent = dir ? `${dir} · ${pc}` : pc;
-      if (net.direct) el.appendChild(wifiIcon());
-      el.className = "online";
+      if (net.direct) el.prepend(wifiIcon());
+      el.className = net.direct ? "online direct" : "online";
     }
   } else if (net.link === "connecting") {
     el.textContent = t("status.connecting");
