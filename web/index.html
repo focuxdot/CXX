@@ -1398,6 +1398,9 @@ const I18N = {
     "diag.direct": "局域网直连",
     "diag.direct_on": "已建立 · 数据点对点直达电脑，不经中继",
     "diag.direct_off": "未建立 · 数据经中继转发（同一 WiFi 下会自动尝试直连）",
+    "diag.phone_direct_sub": "点对点直连电脑，不经中继",
+    "diag.relay_backup": "中继（备用通道）",
+    "diag.relay_backup_down": "已断开 · 不影响直连，将自动重连",
     // I18N-ZH
   },
   en: {
@@ -1728,6 +1731,9 @@ const I18N = {
     "diag.direct": "LAN direct",
     "diag.direct_on": "Active · data flows peer-to-peer to your computer, bypassing the relay",
     "diag.direct_off": "Not active · data goes through the relay (auto-attempted on the same Wi-Fi)",
+    "diag.phone_direct_sub": "Peer-to-peer to your computer, bypassing the relay",
+    "diag.relay_backup": "Relay (standby)",
+    "diag.relay_backup_down": "Disconnected · direct link unaffected; reconnecting automatically",
     // I18N-EN
   },
 };
@@ -3650,11 +3656,49 @@ function diagChain(items) {
   return chain;
 }
 
+// 诊断页的补充信息行（链路图下方）：标题 + 说明，可选 WiFi 图标
+function diagInfoRow(titleText, subText, withIcon) {
+  const row = document.createElement("div");
+  row.className = "diaglabel";
+  const title = document.createElement("div");
+  title.className = "diagtitle";
+  title.textContent = titleText;
+  if (withIcon) title.prepend(wifiIcon());
+  const sub = document.createElement("div");
+  sub.className = "diagsub";
+  sub.textContent = subText;
+  row.append(title, sub);
+  return row;
+}
+
 function renderDiag() {
   const box = $("diaglist");
   box.innerHTML = "";
   const relayHost = (app.session?.info.relay || "").replace(/^wss?:\/\//, "").replace(/[/?#].*$/, "");
   const pcName = app.session?.info.name || t("diag.pc");
+
+  // 直连态：链路如实画成 手机 ↔ 电脑 两点直达（数据面不经中继）；
+  // 中继退居下方"备用通道"一行——它仍承担在线状态与回落，断了要看得见
+  if (net.direct) {
+    let pcState = "ok";
+    let pcSub = `${pcName} · ${t("diag.codex_ok")}`;
+    if (net.engine === "down") {
+      pcState = "warn";
+      pcSub = `${pcName} · ${t("diag.codex_down")}`;
+    } else if (net.engine !== "ok") {
+      pcSub = `${pcName} · ${t("diag.codex_oldremote")}`;
+    }
+    box.appendChild(diagChain([
+      diagPoint("ok", t("diag.phone"), t("diag.phone_direct_sub"), "ok"),
+      diagPoint(pcState, t("diag.pc"), pcSub),
+    ]));
+    box.appendChild(diagInfoRow(t("diag.direct"), t("diag.direct_on"), true));
+    box.appendChild(diagInfoRow(
+      t("diag.relay_backup"),
+      net.link === "ok" ? t("diag.connected_host", relayHost) : t("diag.relay_backup_down"),
+    ));
+    return;
+  }
   const phoneRelayLink = net.link === "ok" ? "ok" : net.link === "down" ? "down" : "";
   const relayPcLink = net.link !== "ok" ? "" : net.daemon === true ? "ok" : net.daemon === false ? "down" : "";
   let phoneState = "";
@@ -3712,19 +3756,10 @@ function renderDiag() {
     diagPoint(pcState, t("diag.pc"), pcSub),
   ]));
 
-  // 局域网直连状态（非观众且 daemon 支持时才有意义；观众恒走中继不展示）
+  // 局域网直连状态（走到这里必然未建立——建立态在上方走两点直达分支）。
+  // 观众恒走中继，不展示此行。
   if (!app.isViewer && app.session && !app.session.info.viewer) {
-    const row = document.createElement("div");
-    row.className = "diaglabel";
-    const title = document.createElement("div");
-    title.className = "diagtitle";
-    title.textContent = t("diag.direct");
-    if (net.direct) title.prepend(wifiIcon());
-    const sub = document.createElement("div");
-    sub.className = "diagsub";
-    sub.textContent = net.direct ? t("diag.direct_on") : t("diag.direct_off");
-    row.append(title, sub);
-    box.appendChild(row);
+    box.appendChild(diagInfoRow(t("diag.direct"), t("diag.direct_off")));
   }
 }
 
