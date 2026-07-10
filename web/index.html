@@ -118,6 +118,10 @@ try {
   #status.warn::before { background: var(--warn); }
   #status.down { color: var(--err); }
   #status.down::before { background: var(--err); }
+  /* 局域网直连 WiFi 图标：stroke 用 currentColor，颜色随所在文本（副标题/诊断标题）走 */
+  .wifiico { width: 1em; height: 1em; vertical-align: -0.15em; }
+  #status .wifiico { margin-left: 4px; }
+  .diagtitle .wifiico { margin-right: 4px; }
   #agentpick { flex: none; display: none; position: relative; align-items: center; }
   #agentpick .agentbtn { display: flex; align-items: center; gap: 6px; height: 36px;
                          border: none; border-radius: 18px; background: none; color: var(--text);
@@ -3521,6 +3525,31 @@ function updateJump() {
 
 // —— 状态胶囊 + 分层连接诊断 ——
 // 胶囊只显示"最深的断层"；点开弹层看三层各自的状态与建议
+// 局域网直连的 WiFi 图标：内联 SVG（stroke: currentColor）随所在文本的色系走——
+// emoji 做不到跟色，且 🛜 是 2023 年才入 Unicode 的字形，旧设备会显示方框
+function wifiIcon() {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2.4");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("aria-hidden", "true");
+  svg.classList.add("wifiico");
+  for (const d of [
+    "M2 8.8a15 15 0 0 1 20 0",
+    "M5.5 12.6a10 10 0 0 1 13 0",
+    "M9 16.4a5 5 0 0 1 6 0",
+    "M12 20h.01",
+  ]) {
+    const path = document.createElementNS(NS, "path");
+    path.setAttribute("d", d);
+    svg.appendChild(path);
+  }
+  return svg;
+}
+
 function updateStatusPill() {
   if (app.viewerEnded) return; // 围观终态：pill 固定「已结束」，不被连接层状态覆盖
   const el = $("status");
@@ -3540,7 +3569,8 @@ function updateStatusPill() {
       // 一切正常：首页副标题是电脑名；会话页对标官方 App 的「项目文件夹 · 机器名」
       const dir = sessionDirLabel();
       const pc = app.session?.info.name || t("status.connected");
-      el.textContent = (dir ? `${dir} · ${pc}` : pc) + (net.direct ? " 🛜" : "");
+      el.textContent = dir ? `${dir} · ${pc}` : pc;
+      if (net.direct) el.appendChild(wifiIcon());
       el.className = "online";
     }
   } else if (net.link === "connecting") {
@@ -3688,7 +3718,8 @@ function renderDiag() {
     row.className = "diaglabel";
     const title = document.createElement("div");
     title.className = "diagtitle";
-    title.textContent = `${net.direct ? "🛜 " : ""}${t("diag.direct")}`;
+    title.textContent = t("diag.direct");
+    if (net.direct) title.prepend(wifiIcon());
     const sub = document.createElement("div");
     sub.className = "diagsub";
     sub.textContent = net.direct ? t("diag.direct_on") : t("diag.direct_off");
