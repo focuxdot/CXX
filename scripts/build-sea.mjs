@@ -7,8 +7,9 @@
 //   3. a copy of the current `node` binary is made
 //   4. (macOS) its signature is stripped, blob injected with postject, then re-signed
 //
-// The daemon has zero runtime npm deps and uses only node: builtins, so the bundle
-// is self-contained. Output: dist/sea/cxx-daemon (+ .exe on Windows).
+// The daemon has zero runtime npm deps — it uses node: builtins plus pre-bundled
+// pure-JS vendor files (daemon/src/vendor/, see scripts/vendor-werift.mjs), so the
+// bundle is self-contained. Output: dist/sea/cxx-daemon (+ .exe on Windows).
 //
 // IMPORTANT: the base runtime must be an OFFICIAL Node.js binary. Homebrew's node is
 // built without the SEA fuse sentinel, so postject can't inject into it. This script

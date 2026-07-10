@@ -36,6 +36,7 @@ import { makeDeps as makeWinAgentDeps } from "./win-agent.mjs";
 import { makeDeps as makeLinuxAgentDeps } from "./linux-agent.mjs";
 import { PowerManager } from "./power.mjs";
 import { RelayLink } from "./relay-link.mjs";
+import { RtcLink } from "./rtc-link.mjs";
 import { SessionHub } from "./session-hub.mjs";
 import { cxxVersion } from "./version.mjs";
 import { resolve as resolvePath, sep as pathSep } from "node:path";
@@ -320,19 +321,69 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
     },
   };
 
+  // 局域网直连（WebRTC DataChannel，见 PROTOCOL.md §3.9）：与 relay 平级的第二条客户端
+  // 来源。信令经已鉴权的中继连接转入（client-session 的 rtc.offer），通道打开后按 rtc-N
+  // cid 建 ClientSession——信封/鉴权/方法路由与中继连接完全同一套代码。默认开启，
+  // 配置 rtcDirect:false 可关（关闭时 rtc.offer 返回 501，客户端静默作罢）。
+  const rtc = config.rtcDirect === false ? null : new RtcLink({
+    log,
+    onOpen(cid, io) {
+      sessions.set(
+        cid,
+        new ClientSession(cid, daemonContext, {
+          send: io.send,
+          close: io.close,
+          getBufferedAmount: io.bufferedAmount, // 背压按本 DataChannel 的缓冲算，与中继 ws 无关
+        }),
+      );
+      log(`client 直连接入: ${cid}（当前 ${sessions.size} 个连接）`);
+      emit({ event: "clients", count: sessions.size });
+      // 直连口的鉴权限时：中继路径有 relay 看管连接生命周期，直连没有——打开通道却
+      // 迟迟不鉴权的对端（探测/半途而废）1 分钟后掐掉，不让未授权连接白占 ClientSession
+      const timer = setTimeout(() => {
+        const s = sessions.get(cid);
+        if (s && !s.deviceId) {
+          log(`rtc ${cid} 超时未鉴权，断开`);
+          io.close();
+        }
+      }, 60_000);
+      timer.unref?.();
+    },
+    onMessage(cid, data) {
+      sessions.get(cid)?.onEnvelope(data);
+    },
+    onClose(cid) {
+      const s = sessions.get(cid);
+      if (!s) return;
+      s.dispose();
+      sessions.delete(cid);
+      log(`client 直连断开: ${cid}`);
+      emit({ event: "clients", count: sessions.size });
+    },
+  });
+  daemonContext.rtc = rtc;
+
   const relay = new RelayLink(config.relayUrl, config.daemonId, {
     log,
     onStatus(connected) {
       emit({ event: "relay", connected });
       // relay 断开期间客户端的 {t:"close"} 帧收不到：不清理的话，断线时离开的客户端
       // 会话会永久滞留（假在线撑着防睡眠、抑制"任务完成"通知、虚高观众计数）。
-      // 就地全清——重连后 relay 会为仍在线的客户端补发 open 重建，语义不变。
-      if (!connected && sessions.size > 0) {
-        const n = sessions.size;
-        for (const session of sessions.values()) session.dispose();
-        sessions.clear();
-        log(`relay 断开，清理 ${n} 个客户端会话（重连后由 open 补发重建）`);
-        emit({ event: "clients", count: 0 });
+      // 就地清掉中继来源的会话——重连后 relay 会为仍在线的客户端补发 open 重建，语义
+      // 不变。直连（rtc- 前缀，中继 cid 恒为 c… 前缀）不受中继断连影响，不清：
+      // 这正是直连的价值——外网抖断时局域网通道照常工作。
+      if (!connected) {
+        let n = 0;
+        for (const [cid, session] of sessions) {
+          if (cid.startsWith("rtc-")) continue;
+          session.dispose();
+          sessions.delete(cid);
+          n++;
+        }
+        if (n > 0) {
+          log(`relay 断开，清理 ${n} 个中继客户端会话（重连后由 open 补发重建）`);
+          emit({ event: "clients", count: sessions.size });
+        }
       }
     },
     onOpen(cid) {
@@ -454,6 +505,7 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
       configWatcher.close();
       clearInterval(expiryTimer);
       relay.stop();
+      rtc?.stop();
       for (const backend of Object.values(backends)) backend.stop();
       for (const session of sessions.values()) session.dispose();
       sessions.clear();

@@ -182,6 +182,7 @@ export class ClientSession {
   #daemon; // { config, configPath, privateKey, appServer, hub, log }
   #send; // (data) => void  发送 E2E 信封给该 client
   #close; // () => void     要求 relay 断开该 client
+  #getBuffered; // () => number  本连接传输层的未冲刷字节数（背压水位）
   #key = null;
   #clientDeflate = false; // 对端首帧 zc:1 时置真：其能 inflate，故大帧 d2c 可 deflate 压缩
   // 信封序号（防中继重放）：对端在 auth 参数里声明 caps.seq:1 后启用——协商走加密信道，
@@ -235,11 +236,14 @@ export class ClientSession {
   static #OUTBOX_MAX_CHARS = 2 * 1024 * 1024;
   static #SEND_HIGH_WATER = 1 << 20; // relay WebSocket bufferedAmount 高水位
 
-  constructor(cid, daemon, { send, close }) {
+  constructor(cid, daemon, { send, close, getBufferedAmount }) {
     this.#cid = cid;
     this.#daemon = daemon;
     this.#send = send;
     this.#close = close;
+    // 背压水位按传输层区分：直连（RTC DataChannel）连接看自己通道的缓冲，
+    // 中继连接共享 relay 上行 ws 的缓冲（历史行为，缺省回落）
+    this.#getBuffered = getBufferedAmount ?? (() => this.#daemon.getBufferedAmount?.() ?? 0);
   }
 
   // —— 供 hub/main 读取的连接身份（#device 保持私有）——
@@ -360,6 +364,22 @@ export class ClientSession {
       case "ping":
         this.#notify("pong", {});
         return;
+      case "rtc.offer": {
+        // 局域网直连升级（PROTOCOL.md §3.9）：本连接充当信令通道——已过鉴权，
+        // 未授权设备根本走不到这里。vanilla ICE 单次往返：offer 进、answer 出。
+        // 直连通道建立后对端会重新握手+鉴权，这里不传递任何身份。
+        // 观众连接被 VIEWER_METHODS 白名单挡在门外（直连仅全权设备）。
+        if (!this.#daemon.rtc) {
+          this.#reply(message.id, null, { code: 501, message: "直连未开启" });
+          return;
+        }
+        try {
+          this.#reply(message.id, await this.#daemon.rtc.handleOffer(this, message.params));
+        } catch (err) {
+          this.#reply(message.id, null, { code: 500, message: `直连协商失败: ${err.message}` });
+        }
+        return;
+      }
       case "agents.list":
         // 手机端首页下拉数据源：已注册的可切换 agent（codex / claude）
         this.#reply(message.id, {
@@ -945,6 +965,14 @@ export class ClientSession {
     }
   }
 
+  // daemon 能力回执（auth 应答）：img=图片推送流；rtc=支持局域网直连升级（rtc.offer）。
+  // 客户端据 rtc 决定是否发起直连协商——不广播的话旧 daemon 会收到打不着的 rtc.offer
+  #daemonCaps() {
+    const caps = { img: 1 };
+    if (this.#daemon.rtc) caps.rtc = 1;
+    return caps;
+  }
+
   async #auth(message) {
     const params = message.params ?? {};
     // 信封序号能力在加密的 auth 参数里协商（caps.seq:1）：中继看不见也剥不掉。
@@ -979,7 +1007,7 @@ export class ClientSession {
         daemonName: paired.config.daemonName,
         protocol: APP_PROTOCOL,
         engine: this.#daemon.appServer.healthy ? "ok" : "down",
-        caps: { img: 1 }, // daemon 能力回执：客户端据此等待图片推送而非立即逐块拉取
+        caps: this.#daemonCaps(), // 能力回执：客户端据此等待图片推送（img）、发起直连升级（rtc）
       });
       this.#registerAllHubs();
       for (const id of pairMerged) this.#daemon.kickDevice?.(id); // 旧凭据若还连着，一并踢下线
@@ -1051,7 +1079,7 @@ export class ClientSession {
               scope: { sessionId: device.scope?.sessionId ?? null, agent: device.scope?.agent ?? "codex" },
               sessionName: device.sessionName ?? "",
             }
-          : { caps: { img: 1 } }), // daemon 能力回执：客户端据此等待图片推送而非立即逐块拉取
+          : { caps: this.#daemonCaps() }), // 能力回执：图片推送（img）、直连升级（rtc）
       });
       this.#registerAllHubs();
       for (const id of devMerged) this.#daemon.kickDevice?.(id); // 同浏览器旧凭据若还连着，踢下线
@@ -1305,7 +1333,7 @@ export class ClientSession {
       let done = false;
       try {
         for (let offset = 0; offset < img.data.length; offset += IMAGE_CHUNK_CHARS) {
-          while ((this.#daemon.getBufferedAmount?.() ?? 0) >= ClientSession.#SEND_HIGH_WATER) {
+          while (this.#getBuffered() >= ClientSession.#SEND_HIGH_WATER) {
             if (this.#disposed || gen !== this.#watchGen) return;
             await new Promise((resolve) => {
               const timer = setTimeout(resolve, 50);
@@ -1388,7 +1416,7 @@ export class ClientSession {
   #drainOutbox() {
     if (this.#drainTimer) return; // 已有排空调度在等水位
     while (this.#outbox.length > 0) {
-      const buffered = this.#daemon.getBufferedAmount?.() ?? 0;
+      const buffered = this.#getBuffered();
       if (buffered >= ClientSession.#SEND_HIGH_WATER) {
         if (!this.#congestedSince) this.#congestedSince = Date.now();
         this.#drainTimer = setTimeout(() => {
@@ -1440,7 +1468,7 @@ export class ClientSession {
         if (at >= target) break;
         if (
           this.#outbox.length > 0 ||
-          (this.#daemon.getBufferedAmount?.() ?? 0) >= ClientSession.#SEND_HIGH_WATER
+          this.#getBuffered() >= ClientSession.#SEND_HIGH_WATER
         ) {
           // 背压：水位没回落或上一批帧没送完就等——溢出会清空 outbox，
           // 只看队列长度会在高水位下读了丢、丢了读地空转

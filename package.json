@@ -14,6 +14,7 @@
     "notify": "node daemon/src/main.mjs notify",
     "relay": "node relay/node/server.mjs",
     "smoke": "node scripts/smoke.mjs",
+    "smoke:rtc": "node scripts/smoke-rtc.mjs",
     "test": "node --test",
     "check:schema": "node scripts/check-schema.mjs",
     "check:schema:update": "node scripts/check-schema.mjs --update",

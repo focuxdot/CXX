@@ -1391,6 +1391,9 @@ const I18N = {
     "banner.filereadfail": "读取文件失败",
     "toast.linkunavail": "链接不可用，请回到聊天里转发原链接",
     "toast.promptcopied": "已复制这条 prompt",
+    "diag.direct": "局域网直连",
+    "diag.direct_on": "已建立 · 数据点对点直达电脑，不经中继",
+    "diag.direct_off": "未建立 · 数据经中继转发（同一 WiFi 下会自动尝试直连）",
     // I18N-ZH
   },
   en: {
@@ -1718,6 +1721,9 @@ const I18N = {
     "banner.filereadfail": "Couldn't read the file",
     "toast.linkunavail": "Link unavailable — go back to the chat and forward the original link",
     "toast.promptcopied": "Prompt copied",
+    "diag.direct": "LAN direct",
+    "diag.direct_on": "Active · data flows peer-to-peer to your computer, bypassing the relay",
+    "diag.direct_off": "Not active · data goes through the relay (auto-attempted on the same Wi-Fi)",
     // I18N-EN
   },
 };
@@ -1993,6 +1999,16 @@ const AGENT_ROUTED = new Set([
   "share.create", "share.list", "share.react",
 ]);
 
+// 会话族请求按当前 agent 路由：daemon 据 agent 字段选 backend/hub（缺省=codex）。
+// agents.list/auth/share.revoke 等不带；已显式带 agent 的（如审批回执用请求方 agent）不覆盖。
+// 中继与直连两条通道的 request 共用此注入，路由行为不因传输层而异。
+function injectAgent(method, params) {
+  if (params.agent === undefined && typeof app !== "undefined" && app?.agent && AGENT_ROUTED.has(method)) {
+    return { ...params, agent: app.agent };
+  }
+  return params;
+}
+
 class Session {
   constructor(daemonInfo) {
     this.info = daemonInfo;
@@ -2023,6 +2039,12 @@ class Session {
     this.recvSeq = 0;
     this.sendChain = Promise.resolve();
     this.recvChain = Promise.resolve();
+    // 局域网直连（RTC DataChannel）：与中继并存的第二条 E2E 信道。中继连接永远是
+    // 先建立的主通道（信令与回落路径）；直连就绪后数据面热切换过去，死了迁回。
+    this.rtc = null;         // RtcChannel | null（在连或已就绪）
+    this.rtcTimer = null;    // 直连重试排队
+    this.rtcAttempts = 0;    // 重试退避指数（升级成功/中继重连时清零）
+    this.lastAuth = null;    // 最近一次鉴权结果：直连切换/回落时重放 onReady 用
   }
 
   async start() {
@@ -2078,6 +2100,7 @@ class Session {
         if (err.code === 403) {
           this.dead = true;
           this.stopPing();
+          this.closeRtc(); // 令牌已失效：直连通道同凭据，一并收尾（daemon 侧也会踢）
           try { this.ws?.close(); } catch {}
           this.onAuthFail(err);
           return;
@@ -2105,8 +2128,10 @@ class Session {
       // 鉴权确认电脑可用——此后才允许标绿；清掉后台重鉴权标记
       this.awaitingAuth = false;
       this.needsReauth = false;
+      this.lastAuth = auth;
       this.onStatus({ link: "ok", daemon: true });
       this.onReady(auth);
+      this.#maybeUpgradeRtc(auth); // 中继就绪后台尝试直连升级：成败都不影响主路径
     } catch (err) {
       if (this.connEpoch !== epoch) return; // 过期尝试的失败静默丢弃，不再触发重连
       throw err;
@@ -2193,6 +2218,14 @@ class Session {
   // 回到前台/网络恢复时调用：断了立即重连；看似 OPEN 也要验活（iOS 僵尸 socket）
   ensureAlive() {
     if (this.closedByUser || this.dead) return;
+    // 直连通道随前台一并验活/重试：iOS 后台冻结后 DataChannel 常已死而不自知
+    if (this.rtc?.ready) {
+      this.rtc.verify();
+    } else if (!this.rtc && this.lastAuth?.caps?.rtc === 1 && !this.info.viewer) {
+      if (this.rtcTimer) { clearTimeout(this.rtcTimer); this.rtcTimer = null; }
+      this.rtcAttempts = 0;
+      this.#startRtc();
+    }
     // 后台鉴权超时留下的欠账：socket 看着还 OPEN 但从未鉴权成功，单纯 ping 没用，
     // 必须重建以重新握手+重鉴权（否则回前台会卡在"电脑离线"）。
     if (this.needsReauth) {
@@ -2339,11 +2372,17 @@ class Session {
   }
 
   request(method, params = {}, timeoutMs = 15000) {
-    // 会话族请求按当前 agent 路由：daemon 据 agent 字段选 backend/hub（缺省=codex）。
-    // agents.list/auth/share.* 不带；已显式带 agent 的（如审批回执用请求方 agent）不覆盖。
-    if (params.agent === undefined && typeof app !== "undefined" && app?.agent && AGENT_ROUTED.has(method)) {
-      params = { ...params, agent: app.agent };
+    // 直连通道就绪时数据面走直连；auth 是各通道自有的（中继重鉴权必须走中继 ws），
+    // rtc.offer 是直连的信令（必须走中继转交 daemon），二者恒走中继
+    if (this.rtc?.ready && method !== "auth" && method !== "rtc.offer") {
+      return this.rtc.request(method, params, timeoutMs);
     }
+    return this.relayRequest(method, params, timeoutMs);
+  }
+
+  // 恒经中继通道的请求（request 的直连路由旁路）：信令、回落场景的中继侧收尾用
+  relayRequest(method, params = {}, timeoutMs = 15000) {
+    params = injectAgent(method, params);
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       // 超时定时器随请求了结即清：不清的话每个请求都挂一个 15s 定时器到期才释放
@@ -2364,6 +2403,297 @@ class Session {
         (p ? p.reject : reject)(e);
       });
     });
+  }
+
+  // —— 局域网直连升级（见 PROTOCOL.md §3.9）——
+  // 中继鉴权成功后后台尝试：daemon 声明 caps.rtc 才发起（旧 daemon 不打搅）；
+  // 观众不升级（围观走中继足矣，且 rtc.offer 被 daemon 白名单挡住）。
+  // 失败/断开静默回落中继并退避重试——直连永远是锦上添花，不是依赖。
+  #maybeUpgradeRtc(auth) {
+    if (this.info.viewer || this.closedByUser || this.dead) return;
+    if (auth?.caps?.rtc !== 1) return;
+    if (typeof RTCPeerConnection === "undefined") return;
+    if (this.rtc) return; // 已在连/已就绪
+    if (this.rtcTimer) { clearTimeout(this.rtcTimer); this.rtcTimer = null; }
+    this.rtcAttempts = 0; // 中继（重）连成功：网络环境可能变了，重置退避从头试
+    this.#startRtc();
+  }
+
+  #startRtc() {
+    if (this.rtc || this.closedByUser || this.dead || this.info.viewer) return;
+    if (document.visibilityState !== "visible") return; // 后台零活动；回前台由 ensureAlive 触发
+    const chan = new RtcChannel(this, { onDead: () => this.#onRtcDead(chan) });
+    this.rtc = chan;
+    chan.connect().then((auth) => {
+      if (this.rtc !== chan || this.closedByUser || this.dead) { chan.close(); return; }
+      this.rtcAttempts = 0;
+      this.lastAuth = auth;
+      this.onStatus({ direct: true });
+      // 热切换：先撤中继侧的 watch 订阅（不等应答；没在 watch 也无害），再重放 onReady
+      // 让上层在直连通道上重建 watch / 刷新——复用与断线重连完全相同的恢复机制
+      this.relayRequest("session.unwatch", {}).catch(() => {});
+      this.onReady(auth);
+    }).catch(() => this.#onRtcDead(chan));
+  }
+
+  #onRtcDead(chan) {
+    if (this.rtc !== chan) return; // 已被顶替/已收尾
+    this.rtc = null;
+    const wasReady = chan.ready;
+    chan.close();
+    if (this.closedByUser || this.dead) { this.onStatus({ direct: false }); return; }
+    this.onStatus({ direct: false });
+    // 热回落：中继通道全程没断（它一直垫底），立即在其上重建 watch；
+    // 中继若也断着，其自身重连的 onReady 会恢复一切，这里不越俎代庖
+    if (wasReady && this.ws?.readyState === WebSocket.OPEN && !this.awaitingAuth && this.lastAuth) {
+      this.onReady(this.lastAuth);
+    }
+    // 退避重试（5s 起、双倍、封顶 2 分钟）：回家/换网后自动提速靠它
+    const delay = Math.min(5000 * 2 ** this.rtcAttempts, 120000);
+    this.rtcAttempts += 1;
+    this.rtcTimer = setTimeout(() => {
+      this.rtcTimer = null;
+      this.#startRtc();
+    }, delay);
+  }
+
+  // 换电脑/令牌撤销等终局路径的直连收尾：停止重试并关闭通道
+  closeRtc() {
+    if (this.rtcTimer) { clearTimeout(this.rtcTimer); this.rtcTimer = null; }
+    const chan = this.rtc;
+    this.rtc = null;
+    if (chan) {
+      chan.close();
+      this.onStatus({ direct: false });
+    }
+  }
+}
+
+// —— 局域网直连通道（WebRTC DataChannel，PROTOCOL.md §3.9）——
+// 与中继并存的第二条 E2E 信道：信令（rtc.offer）走已鉴权的中继连接做单次 offer/answer
+// 往返（vanilla ICE，无 STUN/TURN——同网直连，跨网自然失败回落）；DataChannel 打开后
+// 在其上重新完成 E2E 握手 + deviceToken 鉴权。直连的信任锚仍是配对时钉死的 daemon
+// X25519 公钥，与 DTLS 层证书无关——传输层（中继或 P2P）恒定不受信。
+// 信封格式/序号防重放/压缩协商与中继通道逐字节一致：本类的 #sendNow/#onEnvelope 是
+// Session 同名逻辑的直连版（差异仅在裸信封无 {t:"msg"} 包装），协议改动两处必须同步。
+class RtcChannel {
+  constructor(session, { onDead }) {
+    this.session = session; // 宿主中继通道：信令、凭据（deviceToken）与 onNotify 出口
+    this.onDead = onDead;
+    this.ready = false;     // 鉴权完成、可承载数据面
+    this.dead = false;
+    this.pc = null;
+    this.dc = null;
+    this.pendingRequests = new Map();
+    this.nextId = 1;
+    this.firstFrame = true;
+    this.sendSeq = 0;
+    this.recvSeq = 0;
+    this.sendChain = Promise.resolve();
+    this.recvChain = Promise.resolve();
+    this.lastPong = 0;
+    this.lastPingAt = 0;
+    this.pingTimer = null;
+  }
+
+  async connect() {
+    const info = this.session.info;
+    // 每条直连各自协商会话密钥（临时密钥对即用即弃），与中继通道互不相干
+    const { key, ephPubRaw } = await deriveKey(info);
+    this.key = key;
+    this.ephPubRaw = ephPubRaw;
+    const pc = new RTCPeerConnection({ iceServers: [] });
+    this.pc = pc;
+    const dc = pc.createDataChannel("cxx");
+    this.dc = dc;
+    pc.onconnectionstatechange = () => {
+      // disconnected 不等恢复直接判死：直连是易失通道，早断早回落，重试便宜
+      if (["failed", "closed", "disconnected"].includes(pc.connectionState)) this.#die();
+    };
+    dc.onclose = () => this.#die();
+    await pc.setLocalDescription(await pc.createOffer());
+    // vanilla ICE：等 candidate 收集完一次性交 offer。无 STUN 时只有 host/mDNS
+    // candidate，数十毫秒集齐；上限兜底防个别内核不触发 complete
+    await new Promise((resolve) => {
+      if (pc.iceGatheringState === "complete") return resolve();
+      const cap = setTimeout(resolve, 2000);
+      pc.onicegatheringstatechange = () => {
+        if (pc.iceGatheringState === "complete") { clearTimeout(cap); resolve(); }
+      };
+    });
+    if (this.dead) throw new Error("rtc aborted");
+    const answer = await this.session.relayRequest("rtc.offer", {
+      type: pc.localDescription.type,
+      sdp: pc.localDescription.sdp,
+    }, 10000);
+    if (this.dead) throw new Error("rtc aborted");
+    await pc.setRemoteDescription(answer);
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("datachannel open timeout")), 10000);
+      dc.onopen = () => { clearTimeout(timer); resolve(); };
+      if (dc.readyState === "open") { clearTimeout(timer); resolve(); }
+    });
+    if (this.dead) throw new Error("rtc aborted");
+    dc.onmessage = (e) => {
+      // 与中继同款串行化：序号"校验→解密→推进"逐帧原子，失败帧整体丢弃
+      this.recvChain = this.recvChain.then(() => this.#onEnvelope(e.data)).catch(() => {});
+    };
+    // 直连信道上的连接对 daemon 是一个全新 ClientSession：重新鉴权（deviceToken 路径）
+    const auth = await this.request("auth", {
+      deviceToken: info.deviceToken,
+      protocol: APP_PROTOCOL,
+      name: deviceLabel(),
+      clientId: clientId(),
+      caps: { seq: 1, img: 1 },
+    }, 10000);
+    if (this.dead) throw new Error("rtc aborted");
+    this.ready = true;
+    this.startPing();
+    return auth;
+  }
+
+  // —— 前台心跳（应用层 ping/pong，PROTOCOL.md §3.5）——
+  // 直连没有中继层 hb 可借：DataChannel 在 iOS 切网/锁屏后同样会僵而不报。
+  // 只在页面可见时跑；上一拍没回即判死回落中继。
+  startPing() {
+    this.stopPing();
+    if (this.dead || document.visibilityState !== "visible") return;
+    this.lastPong = Date.now();
+    this.lastPingAt = 0;
+    this.pingTimer = setInterval(() => {
+      if (this.dead) return;
+      if (this.lastPingAt && this.lastPong < this.lastPingAt) { this.#die(); return; }
+      this.lastPingAt = Date.now();
+      this.send({ method: "ping", params: {} }).catch(() => this.#die());
+    }, PING_MS);
+  }
+
+  stopPing() {
+    if (this.pingTimer) clearInterval(this.pingTimer);
+    this.pingTimer = null;
+  }
+
+  // 回前台验活：先看通道状态，再发一拍限时验收（与中继 ensureAlive 的 hb 验活同款）
+  verify() {
+    if (this.dead) return;
+    if (this.dc?.readyState !== "open") { this.#die(); return; }
+    this.startPing();
+    const sentAt = Date.now();
+    this.lastPingAt = sentAt;
+    this.send({ method: "ping", params: {} }).catch(() => this.#die());
+    setTimeout(() => {
+      if (!this.dead && this.lastPong < sentAt) this.#die();
+    }, HB_VERIFY_MS);
+  }
+
+  async #onEnvelope(raw) {
+    if (this.dead) return;
+    const env = JSON.parse(raw);
+    let aadD2c = AAD_D2C;
+    if (env.s !== undefined) {
+      if (!Number.isInteger(env.s) || env.s <= this.recvSeq) return; // 重放/回退：丢弃
+      aadD2c = enc.encode(`${AAD_PREFIX}:d2c:${env.s}`);
+    } else if (this.recvSeq > 0) {
+      return; // 已启用序号却来了无序号帧：疑似重放，丢弃
+    }
+    const iv = b64.from(env.n);
+    const data = b64.from(env.c);
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv, additionalData: aadD2c }, this.key, data);
+    if (this.dead) return;
+    if (env.s !== undefined) this.recvSeq = env.s; // 只在认证成功后推进（防伪帧毒化计数器）
+    const bytes = env.z ? await inflateRaw(new Uint8Array(plain)) : new Uint8Array(plain);
+    const msg = JSON.parse(new TextDecoder().decode(bytes));
+    if (msg.method === "pong") {
+      this.lastPong = Date.now(); // 通道级活性信号，不上抛
+      return;
+    }
+    if (msg.id !== undefined && this.pendingRequests.has(msg.id)) {
+      const { resolve, reject } = this.pendingRequests.get(msg.id);
+      this.pendingRequests.delete(msg.id);
+      if (msg.error) {
+        const e = new Error(msg.error.message);
+        e.code = msg.error.code;
+        reject(e);
+      } else resolve(msg.result);
+    } else if (msg.method) {
+      this.session.onNotify(msg); // 通知与中继同一出口：上层对传输层无感知
+    }
+  }
+
+  send(payload) {
+    const task = this.sendChain.then(() => {
+      if (this.dead) throw new Error(t("err.disconnected"));
+      return this.#sendNow(payload);
+    });
+    this.sendChain = task.catch(() => {});
+    return task;
+  }
+
+  async #sendNow(payload) {
+    if (this.dc?.readyState !== "open") throw new Error(t("err.disconnected"));
+    let aadC2d = AAD_C2D;
+    let s;
+    if (this.recvSeq > 0) { // 见过 daemon 的带序号帧 = 双方已协商启用
+      s = ++this.sendSeq;
+      aadC2d = enc.encode(`${AAD_PREFIX}:c2d:${s}`);
+    }
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const cipher = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv, additionalData: aadC2d }, this.key, enc.encode(JSON.stringify(payload)));
+    const envelope = { n: b64.to(iv), c: b64.to(cipher) };
+    if (s !== undefined) envelope.s = s;
+    if (this.firstFrame) {
+      envelope.v = 1;
+      envelope.k = b64.to(this.ephPubRaw);
+      if (CAN_INFLATE) envelope.zc = 1;
+      this.firstFrame = false;
+    }
+    if (this.dc?.readyState !== "open") throw new Error(t("err.disconnected"));
+    this.dc.send(JSON.stringify(envelope)); // 裸信封，无中继的 {t:"msg"} 包装
+  }
+
+  request(method, params = {}, timeoutMs = 15000) {
+    params = injectAgent(method, params);
+    const id = this.nextId++;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (this.pendingRequests.has(id)) {
+          this.pendingRequests.delete(id);
+          reject(new Error(t("err.reqtimeout", method)));
+        }
+      }, timeoutMs);
+      this.pendingRequests.set(id, {
+        resolve: (v) => { clearTimeout(timer); resolve(v); },
+        reject: (e) => { clearTimeout(timer); reject(e); },
+      });
+      this.send({ id, method, params }).catch((e) => {
+        const p = this.pendingRequests.get(id);
+        this.pendingRequests.delete(id);
+        (p ? p.reject : reject)(e);
+      });
+    });
+  }
+
+  // 通道死亡（断开/验活失败）：收尾并上报宿主回落。close 是调用方收尾，不回调
+  #die() {
+    if (this.dead) return;
+    this.#teardown();
+    this.onDead();
+  }
+
+  close() {
+    this.#teardown();
+  }
+
+  #teardown() {
+    if (this.dead) return;
+    this.dead = true;
+    this.ready = false;
+    this.stopPing();
+    for (const [, p] of this.pendingRequests) p.reject(new Error(t("err.disconnected")));
+    this.pendingRequests.clear();
+    try { this.dc?.close(); } catch {}
+    try { this.pc?.close(); } catch {}
   }
 }
 
@@ -3020,6 +3350,7 @@ const net = {
   daemon: null,        // null=未知 | true | false（relay status 帧）
   engine: null,        // null=未知 | "ok" | "down"（auth 结果 + daemon.status 通知）
   lastSeen: null,      // 电脑离线时，最近一次在线的毫秒时间戳（relay 提供，可缺省）
+  direct: false,       // 局域网直连（RTC DataChannel）已建立且鉴权：数据面走直连
 };
 
 // —— 应用控制器 ——
@@ -3194,7 +3525,25 @@ function updateStatusPill() {
   if (app.viewerEnded) return; // 围观终态：pill 固定「已结束」，不被连接层状态覆盖
   const el = $("status");
   el.className = "";
-  if (net.link === "connecting") {
+  // 直连活着时电脑必然可达：中继层的断连/离线信号不该盖过它（外网抖断、直连照常干活
+  // 正是直连的价值场景）。⚡ 让"当前走哪条路"肉眼可见。
+  if (net.direct || net.daemon === true) {
+    if (!net.direct && net.link === "connecting") {
+      el.textContent = t("status.connecting");
+    } else if (!net.direct && net.link === "down") {
+      el.textContent = t("status.reconnecting");
+      el.className = "down";
+    } else if (net.engine === "down") {
+      el.textContent = t("status.codexrestart");
+      el.className = "warn";
+    } else {
+      // 一切正常：首页副标题是电脑名；会话页对标官方 App 的「项目文件夹 · 机器名」
+      const dir = sessionDirLabel();
+      const pc = app.session?.info.name || t("status.connected");
+      el.textContent = (dir ? `${dir} · ${pc}` : pc) + (net.direct ? " ⚡" : "");
+      el.className = "online";
+    }
+  } else if (net.link === "connecting") {
     el.textContent = t("status.connecting");
   } else if (net.link === "down") {
     el.textContent = t("status.reconnecting");
@@ -3202,20 +3551,11 @@ function updateStatusPill() {
   } else if (net.daemon === false) {
     el.textContent = t("status.pcoffline");
     el.className = "down";
-  } else if (net.engine === "down") {
-    el.textContent = t("status.codexrestart");
-    el.className = "warn";
-  } else if (net.daemon === true) {
-    // 一切正常：首页副标题是电脑名；会话页对标官方 App 的「项目文件夹 · 机器名」
-    const dir = sessionDirLabel();
-    const pc = app.session?.info.name || t("status.connected");
-    el.textContent = dir ? `${dir} · ${pc}` : pc;
-    el.className = "online";
   } else {
     el.textContent = t("status.connecting");
   }
-  // 离线时禁用发送并在占位符里说明，而不是发送后才报错
-  const offline = net.link !== "ok" || net.daemon === false;
+  // 离线时禁用发送并在占位符里说明，而不是发送后才报错。直连就绪即在线。
+  const offline = !net.direct && (net.link !== "ok" || net.daemon === false);
   $("send").disabled = offline;
   $("input").placeholder = offline ? t("input.offline") : inputPh();
   if ($("diagsheet").classList.contains("open")) renderDiag();
@@ -3341,6 +3681,20 @@ function renderDiag() {
     diagPoint(relayState, t("diag.relay"), relaySub, relayPcLink),
     diagPoint(pcState, t("diag.pc"), pcSub),
   ]));
+
+  // 局域网直连状态（非观众且 daemon 支持时才有意义；观众恒走中继不展示）
+  if (!app.isViewer && app.session && !app.session.info.viewer) {
+    const row = document.createElement("div");
+    row.className = "diaglabel";
+    const title = document.createElement("div");
+    title.className = "diagtitle";
+    title.textContent = `${net.direct ? "⚡ " : ""}${t("diag.direct")}`;
+    const sub = document.createElement("div");
+    sub.className = "diagsub";
+    sub.textContent = net.direct ? t("diag.direct_on") : t("diag.direct_off");
+    row.append(title, sub);
+    box.appendChild(row);
+  }
 }
 
 function openDiag() {
@@ -7487,9 +7841,9 @@ async function switchDaemon(id) {
   const info = daemons[id];
   if (!info || info.id === app.session?.info.id) return;
   setActiveDaemon(id);
-  // 拆掉当前连接与视图
-  if (app.session) { app.session.closedByUser = true; app.session.ws?.close(); }
-  Object.assign(net, { link: "connecting", daemon: null, engine: null, lastSeen: null });
+  // 拆掉当前连接与视图（直连通道一并收尾，否则旧电脑的 DataChannel 会残留）
+  if (app.session) { app.session.closedByUser = true; app.session.closeRtc(); app.session.ws?.close(); }
+  Object.assign(net, { link: "connecting", daemon: null, engine: null, lastSeen: null, direct: false });
   updateStatusPill();
   app.view = "list"; app.currentId = null;
   app.echoes = [];
@@ -7522,6 +7876,7 @@ function showViewerEnded(reason) {
   // 404/超时）时连接还活着，不关掉就会无限重连、反复触发本函数
   if (app.session) {
     app.session.closedByUser = true;
+    app.session.closeRtc(); // 观众本不升级直连，此处是防御性收尾
     try { app.session.ws?.close(); } catch {}
   }
   // 打开已撤销/过期链接时鉴权失败发生在进会话视图之前（view 还是 list，
@@ -8108,7 +8463,10 @@ async function main() {
       // 后台期间 active 复核定时器不打（见 scheduleActiveRecheck）：回前台补一次列表刷新，
       // 让"桌面活动/运行中"徽标立即对齐现状，而不是等下一个 board.changed
       if (app.session && app.view === "list" && !app.isViewer) refreshList().catch(() => {});
-    } else app.session?.stopPing(); // 切后台立即停心跳，不留后台流量
+    } else {
+      app.session?.stopPing(); // 切后台立即停心跳，不留后台流量
+      app.session?.rtc?.stopPing(); // 直连通道同理（通道本身留着，回前台 verify 验活）
+    }
   });
   // 蜂窝↔WiFi 切换、飞行模式恢复：不等退避计时，马上验活/重连。
   // 后台收到 online 不动作（保持零后台活动），回前台由 visibilitychange 补上

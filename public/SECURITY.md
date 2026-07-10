@@ -25,6 +25,21 @@ are intentionally left unchanged from the upstream lineage and are **not** rebra
 them would break interoperability and gain nothing (they are crypto domain separators, not product
 names). Do not change them.
 
+## LAN direct connections (WebRTC)
+
+On the same network, the phone may upgrade to a peer-to-peer WebRTC DataChannel with the daemon
+(signaled over the already-authenticated relay channel; see PROTOCOL.md §3.9). This does not
+change the trust model:
+
+- The E2E envelope runs **on top of** DTLS, byte-for-byte identical to the relay path. The trust
+  anchor remains the daemon's X25519 public key pinned at pairing — the DTLS layer is treated as
+  untrusted transport, exactly like the relay.
+- The direct channel is a brand-new client connection to the daemon: it must complete the E2E
+  handshake and re-authenticate with the device token. Auth-first is enforced (unauthenticated
+  channels are dropped after 60 s); viewers cannot use it at all (method whitelist).
+- The daemon opens **no listening ports** for this: WebRTC negotiates outbound UDP flows on both
+  sides, and no STUN/TURN servers are configured — candidates never leave the local network.
+
 ## Pairing and device tokens
 
 - Pairing tokens are one-time and expire in 5 minutes; only their hashes are stored.
