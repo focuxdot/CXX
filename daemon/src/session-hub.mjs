@@ -300,6 +300,12 @@ export class SessionHub {
     return this.#currentTurn.has(threadId);
   }
 
+  // 本 daemon 亲手建/resume 过的 thread：新建会话「rollout 尚未落盘」竞态的等待判据
+  // （见 client-session #watch）——陌生 id 不享受等待，防读放大
+  hasResumed(threadId) {
+    return this.#resumed.has(threadId);
+  }
+
   approvalCount(threadId) {
     let n = 0;
     for (const entry of this.#approvals.values()) if (entry.threadId === threadId) n++;

@@ -1122,8 +1122,24 @@ export class ClientSession {
     const wt = typeof message.params?.wt === "string" && message.params.wt.length <= 64
       ? message.params.wt
       : null;
-    const thread = await this.#backend(agent).readThread(sessionId);
+    let thread = await this.#backend(agent).readThread(sessionId);
     if (this.#watchSuperseded(gen, message.id)) return;
+    // 新建会话竞态：session.start 应答后引擎的 rollout 文件可能尚未落盘，紧跟着的
+    // watch 读到"无 path"——局域网直连把往返压到毫秒级后这几乎必现（手机端表现为
+    // "Couldn't attach: 会话不存在"，而任务其实在跑）。仅对本 daemon 正在驱动或
+    // 亲手建/resume 过的会话轮询等文件出现（最长 5s）；陌生 id 不享受等待，照旧
+    // 秒回 404（观众/乱猜的 id 不给读放大面）。
+    if (!thread?.path && !this.isViewer) {
+      const hub = this.#hub(agent);
+      if (hub.isRunning(sessionId) || hub.hasResumed?.(sessionId)) {
+        for (let i = 0; i < 20 && !thread?.path; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          if (this.#watchSuperseded(gen, message.id)) return;
+          thread = await this.#backend(agent).readThread(sessionId);
+          if (this.#watchSuperseded(gen, message.id)) return;
+        }
+      }
+    }
     if (!thread?.path) {
       this.#reply(message.id, null, { code: 404, message: "会话不存在" });
       return;
