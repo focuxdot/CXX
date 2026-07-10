@@ -614,8 +614,10 @@ try {
                     font-size: 14px; margin-top: 4px; padding: 8px; cursor: pointer; }
 
   /* 底部输入区：一体化卡片（输入行在上，操作排在下） */
+  /* 底部输入区不铺纯色挡板：让上方消息与快捷指令 chip 之间透出内容，视觉更开阔。
+     仅在最底部用一小段渐变盖住安全区/滑动时贴边的文字，输入卡片本身仍是实色。 */
   #composer { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-              background: var(--bg);
+              background: linear-gradient(to top, var(--bg) 28%, transparent);
               padding: 6px 10px calc(10px + env(safe-area-inset-bottom)); }
   #composer.active { display: block; }
   /* 快捷指令：只在用户主动打开后，才在输入卡片上方露出一排可横滑的快捷发送项 */
