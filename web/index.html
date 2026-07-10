@@ -316,6 +316,10 @@ try {
   .diagstep.link-ok::after { background: var(--ok); opacity: .55; }
   .diagstep.link-warn::after { background: var(--warn); opacity: .7; }
   .diagstep.link-down::after { background: var(--err); opacity: .75; }
+  /* 两节点直连图：端点保持三节点时的左右位置（占第 1、3 列），连线跨过空出的中间列 */
+  .diagsteps.two > .diagstep:last-child { grid-column: 3; }
+  .diagsteps.two > .diagstep:first-child::after { right: calc(-150% + 10px); }
+  .diaglabels.two > .diaglabel:last-child { grid-column: 3; }
   .diagdot { position: relative; z-index: 1; width: 14px; height: 14px; border-radius: 50%;
              background: var(--dim); box-shadow: 0 0 0 4px var(--raised); }
   .diagdot.ok { background: var(--ok); }
@@ -3628,7 +3632,7 @@ function diagChain(items) {
   const chain = document.createElement("div");
   chain.className = "diagchain";
   const steps = document.createElement("div");
-  steps.className = "diagsteps";
+  steps.className = items.length === 2 ? "diagsteps two" : "diagsteps";
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     const link = i < items.length - 1 ? (item.linkAfter || diagLinkState(item, items[i + 1])) : "";
@@ -3641,7 +3645,7 @@ function diagChain(items) {
     steps.appendChild(step);
   }
   const labels = document.createElement("div");
-  labels.className = "diaglabels";
+  labels.className = items.length === 2 ? "diaglabels two" : "diaglabels";
   for (const item of items) {
     const label = document.createElement("div");
     label.className = "diaglabel";
