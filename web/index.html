@@ -3540,7 +3540,7 @@ function updateStatusPill() {
       // 一切正常：首页副标题是电脑名；会话页对标官方 App 的「项目文件夹 · 机器名」
       const dir = sessionDirLabel();
       const pc = app.session?.info.name || t("status.connected");
-      el.textContent = (dir ? `${dir} · ${pc}` : pc) + (net.direct ? " ⚡" : "");
+      el.textContent = (dir ? `${dir} · ${pc}` : pc) + (net.direct ? " 🛜" : "");
       el.className = "online";
     }
   } else if (net.link === "connecting") {
@@ -3688,7 +3688,7 @@ function renderDiag() {
     row.className = "diaglabel";
     const title = document.createElement("div");
     title.className = "diagtitle";
-    title.textContent = `${net.direct ? "⚡ " : ""}${t("diag.direct")}`;
+    title.textContent = `${net.direct ? "🛜 " : ""}${t("diag.direct")}`;
     const sub = document.createElement("div");
     sub.className = "diagsub";
     sub.textContent = net.direct ? t("diag.direct_on") : t("diag.direct_off");
