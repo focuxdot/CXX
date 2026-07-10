@@ -198,7 +198,7 @@ export function notifyRemove(deps, index) {
 // 测试输入框里刚填、尚未「添加」的一条渠道（不落盘，纯 dry-run）。
 export async function notifyTest(deps, entry) {
   const notifier = new Notifier(entry ? [normalizeNotifier(entry)] : [], { log: deps.log });
-  await notifier.send("Codex 远程测试", "如果你收到这条，说明通知渠道配置成功 ✅");
+  await notifier.send("ChatGPT 远程测试", "如果你收到这条，说明通知渠道配置成功 ✅");
   return { ok: true, count: notifier.count };
 }
 
@@ -208,7 +208,7 @@ export async function notifyTestIndex(deps, index) {
   const list = config.notifiers ?? [];
   if (!Number.isInteger(index) || index < 0 || index >= list.length) return { ok: false, count: 0 };
   const notifier = new Notifier([list[index]], { log: deps.log });
-  await notifier.send("Codex 远程测试", "如果你收到这条，说明通知渠道配置成功 ✅");
+  await notifier.send("ChatGPT 远程测试", "如果你收到这条，说明通知渠道配置成功 ✅");
   return { ok: true, count: notifier.count };
 }
 

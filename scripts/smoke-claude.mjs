@@ -378,7 +378,7 @@ exit 0
   if (j >= 0 && args2[j + 1] === "plan") fail(`未带 plan 却启用了 plan 模式：${JSON.stringify(args2)}`);
   ok("未带 plan → 非 plan 模式，plan 开关精确生效");
 
-  // 全权限 override：Codex 侧的 dangerFullAccess/approval never 要映射成 Claude bypass，
+  // 全权限 override：ChatGPT/codex 侧的 dangerFullAccess/approval never 要映射成 Claude bypass，
   // 并且不能再装 PreToolUse hook，否则表面是 full access，实际仍会弹审批。
   rmSync(argsFile, { force: true });
   await hub.sendMessage(randomUUID(), "hi", [], {

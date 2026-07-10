@@ -1,9 +1,9 @@
 {
   "name": "cxx",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "type": "module",
-  "description": "Remote-control your local Codex / Claude Code from your phone. Install alongside existing CLIs — no patched agent required.",
+  "description": "Remote-control your local ChatGPT / Claude Code from your phone. Install alongside existing CLIs — no patched agent required.",
   "license": "MIT",
   "engines": {
     "node": ">=22"

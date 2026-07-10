@@ -1,6 +1,6 @@
 // Pick a free localhost port for the app-server to listen on.
 //
-// The default 19271 is frequently already taken: the OFFICIAL Codex `remote-control` /
+// The default 19271 is frequently already taken: the official ChatGPT/codex `remote-control` /
 // app-server daemon binds it too. We spawn our OWN app-server and must not fight the
 // official one for the port — so we probe the preferred port and fall back to an
 // OS-assigned ephemeral port if it's busy. Since the daemon controls both ends (it

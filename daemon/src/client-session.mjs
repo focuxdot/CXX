@@ -363,7 +363,7 @@ export class ClientSession {
       case "agents.list":
         // 手机端首页下拉数据源：已注册的可切换 agent（codex / claude）
         this.#reply(message.id, {
-          agents: this.#daemon.availableAgents?.() ?? [{ id: "codex", name: "Codex", healthy: true }],
+          agents: this.#daemon.availableAgents?.() ?? [{ id: "codex", name: "ChatGPT", healthy: true }],
         });
         return;
       case "sessions.list": {

@@ -55,7 +55,7 @@ export function buildRequest(n, title, body, link) {
       // Server 酱（微信推送）
       return {
         url: `https://sctapi.ftqq.com/${encodeURIComponent(n.key)}.send`,
-        init: json({ title, desp: link ? `${body}\n\n[打开 Codex 远程](${link})` : body }),
+        init: json({ title, desp: link ? `${body}\n\n[打开 ChatGPT 远程](${link})` : body }),
       };
     case "wecom":
       // 企业微信群机器人

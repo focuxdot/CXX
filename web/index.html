@@ -867,12 +867,12 @@ try {
 <div id="composer">
   <div id="viewerbar">
     <span class="vbadge" data-i18n="viewer.badge">只读围观</span>
-    <span id="vrun"><span class="pulse"></span><span data-i18n="run.running">Codex 运行中…</span></span>
+    <span id="vrun"><span class="pulse"></span><span data-i18n="run.running">ChatGPT 运行中…</span></span>
     <span id="vcount"></span>
     <span class="sp"></span>
     <span id="vreact"></span>
     <button id="vshare" data-i18n-aria="a11y.reshare" aria-label="转发围观"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>
-    <a id="vcta" href="https://focuxdot.github.io/CXX/" target="_blank" rel="noopener" data-i18n="viewer.cta">想让自己的 Codex 也能这样？</a>
+    <a id="vcta" href="https://focuxdot.github.io/CXX/" target="_blank" rel="noopener" data-i18n="viewer.cta">想让自己的 ChatGPT 也能这样？</a>
   </div>
   <div id="plusmenu">
     <!-- 图标与首页/权限图标同一套单色线条，避免 iOS 彩色 emoji 破坏裸排版 -->
@@ -886,12 +886,12 @@ try {
   <div id="card">
     <div id="attachrow"></div>
     <div id="suggest"></div>
-    <textarea id="input" rows="1" data-i18n-ph="input.ph" placeholder="给 Codex 发消息…"></textarea>
+    <textarea id="input" rows="1" data-i18n-ph="input.ph" placeholder="给 ChatGPT 发消息…"></textarea>
     <div class="crow">
       <button id="attach" data-i18n-aria="a11y.sendimg" aria-label="发送图片">＋</button>
       <button id="permbtn" class="obtn ico" data-i18n-aria="a11y.turnperm" aria-label="本轮权限"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg></button>
       <button id="planpill" class="obtn" style="display:none" data-i18n-aria="a11y.exitplan" data-i18n="plan.pill" aria-label="退出计划模式">计划 ✕</button>
-      <span id="runhint"><span class="pulse"></span><span data-i18n="run.running">Codex 运行中…</span></span>
+      <span id="runhint"><span class="pulse"></span><span data-i18n="run.running">ChatGPT 运行中…</span></span>
       <span class="sp"></span>
       <button id="modelbtn" class="obtn" data-i18n-aria="a11y.model" data-i18n="btn.model" aria-label="模型选择">模型</button>
       <button id="stop" data-i18n-aria="a11y.stop" aria-label="停止">■</button>
@@ -987,8 +987,8 @@ const I18N = {
     "btn.model": "模型",
     "viewer.badge": "只读围观",
     "viewer.title": "围观",
-    "viewer.cta": "想让自己的 Codex 也能这样？",
-    "run.running": "Codex 运行中…",
+    "viewer.cta": "想让自己的 ChatGPT 也能这样？",
+    "run.running": "ChatGPT 运行中…",
     "plus.plan": "计划模式",
     "plus.goal": "设定目标",
     "plus.tfile": "发文件",
@@ -998,11 +998,11 @@ const I18N = {
     "slash.new.desc": "在当前项目新建会话",
     "slash.compact.desc": "压缩对话上下文",
     "slash.init.desc": "生成或更新 CLAUDE.md",
-    "input.ph": "给 Codex 发消息…",
+    "input.ph": "给 ChatGPT 发消息…",
     "plan.pill": "计划 ✕",
     "status.reconnecting": "重连中…",
     "status.pcoffline": "电脑离线",
-    "status.codexrestart": "Codex 重启中",
+    "status.codexrestart": "ChatGPT 重启中",
     "status.connected": "已连接",
     "input.offline": "电脑离线，恢复后才能发送",
     "err.nowebcrypto": "此浏览器不支持 WebCrypto（需 HTTPS 环境与较新内核）",
@@ -1012,6 +1012,7 @@ const I18N = {
     "err.reqtimeout": "请求超时: {0}",
     "banner.remoteupdated": "电脑端 Remote 已更新，点这里刷新页面",
     "tool.call": "工具调用",
+    "tool.wait": "等待上一项完成",
     "tool.output": (c) => `输出${c ? `（退出码 ${c}）` : ""}`,
     "diff.one": "修改 {0}",
     "diff.many": "修改 {0} 个文件",
@@ -1029,7 +1030,7 @@ const I18N = {
     "diag.pc": "电脑",
     "diag.phone_relay": "手机 ↔ 中继",
     "diag.relay_pc": "中继 ↔ {0}",
-    "diag.codex": "Codex 主程序",
+    "diag.codex": "ChatGPT 主程序",
     "diag.connected_host": (h) => `已连接${h ? ` · ${h}` : ""}`,
     "diag.phone_relay_down": "已断开，正在自动重连。请检查手机网络；自建中继需确认中继服务在运行",
     "diag.unknown_relay": "未知：先恢复与中继的连接",
@@ -1075,9 +1076,9 @@ const I18N = {
     "dur.sec": "{0} 秒",
     "dur.minsec": "{0} 分 {1} 秒",
     "strip.watchingN": "{0} 人围观中",
-    "strip.awaitingApproval": "Codex 在等你的审批",
+    "strip.awaitingApproval": "ChatGPT 在等你的审批",
     "strip.desktopRunning": "桌面端正在运行",
-    "strip.codexWorking": "Codex 正在工作…",
+    "strip.codexWorking": "ChatGPT 正在工作…",
     "echo.uploading": "上传图片 {0}/{1}…",
     "banner.offline_newsession": "电脑离线，暂时无法新建会话",
     "banner.offline_archive": "电脑离线，暂时无法归档",
@@ -1091,13 +1092,13 @@ const I18N = {
     "echo.queued": "本轮结束后发送 · 点按撤回",
     "a11y.removeimg": "移除图片",
     "banner.offline_goal": "电脑离线，暂时无法设定目标",
-    "prompt.goal": "会话目标（Codex 会持续朝它推进；清空则移除）：",
+    "prompt.goal": "会话目标（ChatGPT 会持续朝它推进；清空则移除）：",
     "banner.goal_set": "目标已设定",
     "banner.goal_cleared": "目标已移除",
     "banner.oldremote_goal": "电脑端 Remote 程序是旧版本，不支持目标——在电脑上重启它即可",
     "banner.goal_fail": "设定目标失败：{0}",
     "banner.binfile": "这是二进制文件，发不了——只支持文本文件和图片",
-    "banner.filetoobig": "文件超过 64KB，请截取需要的部分，或直接在消息里告诉 Codex 文件路径",
+    "banner.filetoobig": "文件超过 64KB，请截取需要的部分，或直接在消息里告诉 ChatGPT 文件路径",
     "file.blockhead": "[文件 {0}]",
     "file.unknownfmt": "未知格式",
     "banner.noclipread": "此浏览器不支持读取剪贴板图片，请用「选照片」",
@@ -1120,7 +1121,7 @@ const I18N = {
     "perm.mode.default": "默认权限",
     "perm.mode.plan": "计划模式",
     "perm.raw.claude": "Claude：{0}",
-    "perm.raw.codex": "Codex：{0}",
+    "perm.raw.codex": "ChatGPT：{0}",
     "a11y.turnperm_named": "本轮权限：{0}",
     "confirm.fullaccess": "完全访问：之后从手机发出的消息将不经审批直接执行命令。确认你信任当前任务再切换。",
     "effort.low": "低",
@@ -1171,7 +1172,7 @@ const I18N = {
     "pull.release": "松手加载更早",
     "pull.down": "下拉加载更早",
     "banner.turnfail": "本轮执行失败。可重新发送，或查看电脑端日志",
-    "empty.hint": "这是一个新会话。在下方给 Codex 布置第一个任务，例如：“把 README 里的安装说明补全”。",
+    "empty.hint": "这是一个新会话。在下方给 ChatGPT 布置第一个任务，例如：“把 README 里的安装说明补全”。",
     "viewer.others": "同场 {0} 人",
     "banner.congested": "围观人数较多，已优先保障你的操作",
     "banner.sharesummary": "围观战报：{0} 人来过，峰值 {1} 人在线，{2} 次喝彩",
@@ -1208,7 +1209,7 @@ const I18N = {
     "banner.oldremote_fork": "电脑端 Remote 程序是旧版本，不支持打分支——在电脑上重启它即可",
     "banner.fork_fail": "打分支失败：{0}",
     "confirm.archive_session.title": "归档当前会话？",
-    "confirm.archive_session.body": "它会从列表中隐藏，可在 Codex 桌面端取消归档。",
+    "confirm.archive_session.body": "它会从列表中隐藏，可在 ChatGPT 桌面端取消归档。",
     "confirm.archive_project.title": "归档这个文件夹？",
     "confirm.archive_project.body": "将隐藏「{0}」下当前可见的所有会话。",
     "toast.archived": "已归档",
@@ -1233,12 +1234,12 @@ const I18N = {
     "share.copylink": "复制围观链接",
     "toast.linkcopied_share": "围观链接已复制，去群里贴上吧",
     "share.system": "分享…",
-    "share.systitle": "围观我的 Codex 会话",
-    "share.systitle2": "围观一场 Codex 会话",
+    "share.systitle": "围观我的 ChatGPT 会话",
+    "share.systitle2": "围观一场 ChatGPT 会话",
     "share.tip": "任何拿到链接的人点开即可围观。可随时在此撤销。",
     "ob.title": "连接你的电脑",
-    "ob.intro": "在手机上实时掌握电脑上的 Codex：看任务进展、处理审批、布置下一步。",
-    "ob.step1": "在电脑上打开 C叉叉，点菜单栏的 Codex 图标",
+    "ob.intro": "在手机上实时掌握电脑上的 ChatGPT：看任务进展、处理审批、布置下一步。",
+    "ob.step1": "在电脑上打开 C叉叉，点菜单栏的 C叉叉 图标",
     "ob.step2": "选「启用手机远程接管」，再点「扫码配对」",
     "ob.step3": "用手机相机扫码（或点扫码页里的链接复制到手机打开）",
     "ob.note1": "扫码即永久连接，可在电脑端「已配对设备」随时移除。全程端到端加密，中继服务器读不到你的会话内容。",
@@ -1295,8 +1296,8 @@ const I18N = {
     "btn.model": "Model",
     "viewer.badge": "Read-only",
     "viewer.title": "Watching",
-    "viewer.cta": "Want this for your own Codex?",
-    "run.running": "Codex running…",
+    "viewer.cta": "Want this for your own ChatGPT?",
+    "run.running": "ChatGPT running…",
     "plus.plan": "Plan mode",
     "plus.goal": "Set goal",
     "plus.tfile": "Send file",
@@ -1306,11 +1307,11 @@ const I18N = {
     "slash.new.desc": "New session in this project",
     "slash.compact.desc": "Compact conversation context",
     "slash.init.desc": "Create or update CLAUDE.md",
-    "input.ph": "Message Codex…",
+    "input.ph": "Message ChatGPT…",
     "plan.pill": "Plan ✕",
     "status.reconnecting": "Reconnecting…",
     "status.pcoffline": "Computer offline",
-    "status.codexrestart": "Codex restarting",
+    "status.codexrestart": "ChatGPT restarting",
     "status.connected": "Connected",
     "input.offline": "Computer offline — you can send once it's back",
     "err.nowebcrypto": "This browser doesn't support WebCrypto (needs HTTPS and a modern engine)",
@@ -1320,6 +1321,7 @@ const I18N = {
     "err.reqtimeout": "Request timed out: {0}",
     "banner.remoteupdated": "The computer's Remote was updated — tap here to refresh",
     "tool.call": "Tool call",
+    "tool.wait": "Waiting for previous step",
     "tool.output": (c) => `Output${c ? ` (exit ${c})` : ""}`,
     "diff.one": "Edited {0}",
     "diff.many": "Edited {0} files",
@@ -1337,7 +1339,7 @@ const I18N = {
     "diag.pc": "Computer",
     "diag.phone_relay": "Phone ↔ Relay",
     "diag.relay_pc": "Relay ↔ {0}",
-    "diag.codex": "Codex engine",
+    "diag.codex": "ChatGPT engine",
     "diag.connected_host": (h) => `Connected${h ? ` · ${h}` : ""}`,
     "diag.phone_relay_down": "Disconnected, reconnecting automatically. Check your phone's network; for a self-hosted relay, make sure it's running",
     "diag.unknown_relay": "Unknown: restore the relay connection first",
@@ -1383,9 +1385,9 @@ const I18N = {
     "dur.sec": "{0}s",
     "dur.minsec": "{0}m {1}s",
     "strip.watchingN": (n) => `${n} watching`,
-    "strip.awaitingApproval": "Codex is waiting for your approval",
+    "strip.awaitingApproval": "ChatGPT is waiting for your approval",
     "strip.desktopRunning": "Running on desktop",
-    "strip.codexWorking": "Codex is working…",
+    "strip.codexWorking": "ChatGPT is working…",
     "echo.uploading": "Uploading image {0}/{1}…",
     "banner.offline_newsession": "Computer offline — can't start a new session right now",
     "banner.offline_archive": "Computer offline — can't archive right now",
@@ -1399,13 +1401,13 @@ const I18N = {
     "echo.queued": "Sent after this turn · tap to undo",
     "a11y.removeimg": "Remove image",
     "banner.offline_goal": "Computer offline — can't set a goal right now",
-    "prompt.goal": "Session goal (Codex keeps working toward it; clear to remove):",
+    "prompt.goal": "Session goal (ChatGPT keeps working toward it; clear to remove):",
     "banner.goal_set": "Goal set",
     "banner.goal_cleared": "Goal removed",
     "banner.oldremote_goal": "The computer's Remote is an old version that doesn't support goals — restart it on the computer",
     "banner.goal_fail": "Couldn't set goal: {0}",
     "banner.binfile": "That's a binary file and can't be sent — only text files and images",
-    "banner.filetoobig": "File exceeds 64KB — send the relevant part, or just tell Codex the file path in a message",
+    "banner.filetoobig": "File exceeds 64KB — send the relevant part, or just tell ChatGPT the file path in a message",
     "file.blockhead": "[file {0}]",
     "file.unknownfmt": "unknown format",
     "banner.noclipread": "This browser can't read images from the clipboard — use “Photos” instead",
@@ -1428,7 +1430,7 @@ const I18N = {
     "perm.mode.default": "Default",
     "perm.mode.plan": "Plan mode",
     "perm.raw.claude": "Claude: {0}",
-    "perm.raw.codex": "Codex: {0}",
+    "perm.raw.codex": "ChatGPT: {0}",
     "a11y.turnperm_named": "Approval for this turn: {0}",
     "confirm.fullaccess": "Full access: messages sent from your phone will run commands without approval. Only switch if you trust the current task.",
     "effort.low": "Low",
@@ -1479,7 +1481,7 @@ const I18N = {
     "pull.release": "Release to load earlier",
     "pull.down": "Pull to load earlier",
     "banner.turnfail": "This turn failed. Try resending, or check the logs on the computer",
-    "empty.hint": "This is a new session. Give Codex a first task below — for example, “Fill in the install instructions in the README.”",
+    "empty.hint": "This is a new session. Give ChatGPT a first task below — for example, “Fill in the install instructions in the README.”",
     "viewer.others": (n) => `${n} other${n == 1 ? "" : "s"} here`,
     "banner.congested": "Lots of viewers — your actions are prioritized",
     "banner.sharesummary": "Share recap: {0} visitors, peak {1} online, {2} cheers",
@@ -1516,7 +1518,7 @@ const I18N = {
     "banner.oldremote_fork": "The computer's Remote is an old version that doesn't support forking — restart it on the computer",
     "banner.fork_fail": "Couldn't fork session: {0}",
     "confirm.archive_session.title": "Archive current session?",
-    "confirm.archive_session.body": "It will be hidden from the list and can be unarchived from Codex on the computer.",
+    "confirm.archive_session.body": "It will be hidden from the list and can be unarchived from ChatGPT on the computer.",
     "confirm.archive_project.title": "Archive this folder?",
     "confirm.archive_project.body": "This will hide every currently visible session under “{0}”.",
     "toast.archived": "Archived",
@@ -1541,12 +1543,12 @@ const I18N = {
     "share.copylink": "Copy viewer link",
     "toast.linkcopied_share": "Viewer link copied — go paste it in your chat",
     "share.system": "Share…",
-    "share.systitle": "Watch my Codex session",
-    "share.systitle2": "Watch a Codex session",
+    "share.systitle": "Watch my ChatGPT session",
+    "share.systitle2": "Watch a ChatGPT session",
     "share.tip": "Anyone with the link can watch. Revoke it here anytime.",
     "ob.title": "Connect your computer",
-    "ob.intro": "Keep tabs on Codex on your computer, live from your phone: watch progress, handle approvals, queue up what's next.",
-    "ob.step1": "On your computer, open CXX and click the Codex icon in the menu bar",
+    "ob.intro": "Keep tabs on ChatGPT on your computer, live from your phone: watch progress, handle approvals, queue up what's next.",
+    "ob.step1": "On your computer, open CXX and click the CXX icon in the menu bar",
     "ob.step2": "Choose “Enable phone remote control,” then “Pair by QR”",
     "ob.step3": "Scan the code with your phone camera (or copy the link from the pairing page and open it on your phone)",
     "ob.note1": "Scanning pairs permanently; remove it anytime under “Paired devices” on the computer. Everything is end-to-end encrypted — the relay server can't read your session content.",
@@ -2237,6 +2239,30 @@ function parseJson(str) {
   try { return JSON.parse(str ?? "{}") ?? {}; } catch { return {}; }
 }
 
+// 新版桌面 Codex 会将宿主工具调用包进 custom_tool_call:exec；真正的工具、命令和
+// 人类可读标题嵌在 input 的 JavaScript 中。这里只做展示用的只读提取，绝不执行该字符串。
+function jsStringField(source, key) {
+  const esc = String(key).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`(?:["']${esc}["']|\\b${esc})\\s*:\\s*("(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*')`);
+  const raw = String(source ?? "").match(re)?.[1];
+  if (!raw) return "";
+  if (raw[0] === '"') {
+    try { return String(JSON.parse(raw)); } catch {}
+  }
+  return raw.slice(1, -1).replace(/\\([\\'"nrt])/g, (_, c) => ({ n: "\n", r: "\r", t: "\t" }[c] ?? c));
+}
+
+function describeCustomToolCall(name, input) {
+  const detail = String(input ?? "");
+  const inner = detail.match(/\btools\.([A-Za-z][\w]*)\s*\(/)?.[1] ?? "";
+  const title = jsStringField(detail, "title");
+  const command = jsStringField(detail, "cmd") || jsStringField(detail, "command");
+  if (title) return { icon: /node_repl|browser/i.test(inner) ? "⌕" : "⚙", label: title, detail, activity: inner };
+  if (command) return { icon: "$", label: command, detail, activity: "exec_command" };
+  if (inner) return { icon: "⚙", label: inner.replace(/^mcp__/, "").replaceAll("__", " · "), detail, activity: inner };
+  return { icon: "⚙", label: name || t("tool.call"), detail, activity: name };
+}
+
 // GUI 版 exec 输出带 harness 前言（Chunk ID/Wall time/…/Output:），剥掉只留正文与退出码
 function cleanExecOutput(raw) {
   const m = raw.match(/Process exited with code (\d+)/);
@@ -2324,6 +2350,10 @@ function itemToBubble(item) {
     if (pt === "function_call") {
       app.sawFunctionCalls = true;
       const args = parseJson(p.arguments);
+      if (/^wait$/i.test(p.name ?? "")) {
+        return { cls: "tool", icon: "◌", label: t("tool.wait"),
+                 detail: JSON.stringify(args, null, 2), callId: p.call_id ?? null };
+      }
       if (EXEC_NAME_RE.test(p.name ?? "")) {
         const cmd = args.cmd ?? args.command;
         const text = (Array.isArray(cmd) ? cmd.join(" ") : cmd) || "";
@@ -2341,8 +2371,8 @@ function itemToBubble(item) {
       return { cls: "toolout", callId: p.call_id ?? null, text: body.trim() || raw, code };
     }
     if (pt === "custom_tool_call") {
-      return { cls: "tool", icon: "⚙", label: p.name || t("tool.call"),
-               detail: String(p.input ?? ""), callId: p.call_id ?? null };
+      const tool = describeCustomToolCall(p.name, p.input);
+      return { cls: "tool", ...tool, callId: p.call_id ?? null };
     }
     return null; // message/reasoning（与 event_msg 重复或不外显）等跳过
   }
@@ -2576,7 +2606,7 @@ function diffNode({ files, ok, callId }) {
     detail: "", callId: callId ?? null,
   });
   const stat = wrap.querySelector(".tstat");
-  // Codex（patch_apply_end）创建即知成败；Claude 传 ok:null + callId，成败由 tool_result
+  // ChatGPT/codex（patch_apply_end）创建即知成败；Claude 传 ok:null + callId，成败由 tool_result
   // 回执经 attachToolOutput 并入（同一配对通道），故保留 tout 只撤掉调用参数文本行
   if (ok !== null && ok !== undefined) {
     stat.textContent = ok ? "✓" : "✗";
@@ -2823,7 +2853,7 @@ function bubbleNode({ cls, text = "", directives = [], refs = [] }) {
   return msg;
 }
 
-// —— 链路状态（三层：手机↔中继 / 中继↔电脑 / Codex 主程序）——
+// —— 链路状态（三层：手机↔中继 / 中继↔电脑 / ChatGPT 主程序）——
 const net = {
   link: "connecting",  // "connecting" | "ok" | "down"
   daemon: null,        // null=未知 | true | false（relay status 帧）
@@ -2842,13 +2872,13 @@ const app = {
   driver: null,        // 运行驱动方："daemon"（手机可停止）| "desktop"（只可看）| null
   agent: "codex",      // 当前后端：codex | claude（多 agent 下拉切换，daemon 按此路由；缺省 codex）
   agents: [],          // agents.list 结果：[{id,healthy,...}]，<2 项时切换器隐藏
-  // —— 活动行状态（Codex / Claude 共用；token/Todo/idle 细节仍是 Claude 专用）——
+  // —— 活动行状态（ChatGPT / Claude 共用；token/Todo/idle 细节仍是 Claude 专用）——
   turnTok: 0,          // Claude 本轮累计 output token（活动行 ↑N tokens）
   tokSeen: null,       // Claude 已计入的 message.id 集合（一响应多行共享 id，按此去重；rising edge 重建）
   actVerb: "",         // 活动行当前动词（随最新块动态：思考/执行命令/编辑…）
   turnStartTs: 0,      // 本轮真实起点=最近一条非 tool_result 用户消息时间戳（耗时锚，跨空闲不漂）
   turnSummarized: false, // 本轮是否已钉"已处理 Xs"总结行（rising edge 重置）
-  desktopIdle: null,   // 桌面驱动会话的运行态空闲兜底定时器（Codex/Claude 通用，见 desktopIdleArm）
+  desktopIdle: null,   // 桌面驱动会话的运行态空闲兜底定时器（ChatGPT/Claude 通用，见 desktopIdleArm）
   todoNode: null,      // 流末尾计划清单 DOM（TodoWrite/Task* 就地更新）
   todoCalls: new Set(), // TodoWrite/TaskCreate/TaskUpdate 的 tool_use id 集合（吞掉工具卡与回执噪音）
   pendingTodos: null,  // 待渲染的最新 todos（trackClaudeActivity 抽出，renderInto 末尾落地）
@@ -3122,7 +3152,7 @@ function renderDiag() {
     relaySub = t("diag.connected_host", relayHost);
   }
 
-  // 3. 电脑：电脑 Remote 与本机 Codex/Claude 引擎状态
+  // 3. 电脑：电脑 Remote 与本机 ChatGPT/Claude 引擎状态
   if (net.link !== "ok") {
     pcSub = t("diag.codex_unknown");
   } else if (net.daemon === true) {
@@ -3317,7 +3347,7 @@ const ARCHIVE_SVG = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none"
 let projectActionTarget = null;
 
 // 折叠态只存在于本次会话内存里，不持久化：每次加载首页所有项目/「对话」段一律折叠
-// （对标 Codex 的干净默认）。展开/收起在浏览期间照常生效，刷新后回到全折叠。
+// （对标 ChatGPT 的干净默认）。展开/收起在浏览期间照常生效，刷新后回到全折叠。
 // 曾经存进 localStorage 的旧状态会累积成「莫名其妙默认展开了几个项目」，故清掉。
 function loadExpanded() {
   try { localStorage.removeItem("czr-expanded"); } catch {}
@@ -3410,7 +3440,7 @@ function applyLang(mode) {
   document.documentElement.lang = LANG === "zh" ? "zh-CN" : "en";
   applyStaticI18n();
   updateLangChecks();
-  updateStatusPill(); // applyStaticI18n 重置了输入框占位为写死的 Codex 串，按当前 agent 复位
+  updateStatusPill(); // applyStaticI18n 重置了输入框占位为写死的 ChatGPT 串，按当前 agent 复位
   if (app.view === "list") renderList();
 }
 
@@ -3428,7 +3458,7 @@ function updateMenuState() {
 function normSep(cwd) {
   return (cwd || "").trim().replace(/[\\/]+$/, "").replace(/\\/g, "/");
 }
-// 桌面版 Codex 给每个新聊天在 <家>/Documents/Codex/<日期>/<聊天名> 建的托管目录：
+// 桌面版 ChatGPT/codex 给每个新聊天在 <家>/Documents/Codex/<日期>/<聊天名> 建的托管目录：
 // 目录名是聊天名（new-chat-7、csv-markdown…）而非用户项目，既不该进"项目"，
 // 行内副标题也不该重复展示这个目录名。
 function isManagedChatDir(cwd) {
@@ -3436,7 +3466,7 @@ function isManagedChatDir(cwd) {
 }
 
 // "项目"只留真正的工作目录，其余算散聊天：
-// - 桌面版 Codex 托管的每聊天目录（见 isManagedChatDir）
+// - 桌面版 ChatGPT/codex 托管的每聊天目录（见 isManagedChatDir）
 // - 家目录本身、桌面/文档/下载、临时目录、盘符根/根目录
 // 分隔符与大小写均归一，兼容 Windows(C:\Users\…\Documents\Codex) 与 POSIX(/Users、/home)。
 function isProjectDir(cwd) {
@@ -3505,7 +3535,7 @@ function renderProjects(list, attnIds, q) {
     }
   }
   // 散聊天：headSessions 里的非项目目录会话（近端一页），去重 attention。
-  // 对标桌面 Codex：「对话」整段可折叠，且和项目一样默认折叠（搜索时强制展开以露出命中）。
+  // 对标桌面 ChatGPT：「对话」整段可折叠，且和项目一样默认折叠（搜索时强制展开以露出命中）。
   const chats = app.headSessions.filter((s) => !isProjectDir(s.cwd) && !attnIds.has(s.id) && sessionMatches(s, q));
   if (chats.length) {
     const closed = !app.expanded.has(CHATS_KEY) && !q;
@@ -3927,7 +3957,7 @@ function cleanAgentList(raw) {
     .map((a) => {
       const id = a?.id || a?.agent;
       if (!AGENT_UI_READY.has(id)) return null;
-      return { id, name: a.name || agentLabel(id), healthy: a.healthy !== false };
+      return { id, name: agentLabel(id), healthy: a.healthy !== false };
     })
     .filter(Boolean);
 }
@@ -3959,7 +3989,7 @@ function hydrateAgentSnapshot(daemonId) {
 }
 
 function agentLabel(id) {
-  return id === "claude" ? "Claude" : id === "codex" ? "Codex" : id;
+  return id === "claude" ? "Claude" : id === "codex" ? "ChatGPT" : id;
 }
 
 function agentIconNode(id) {
@@ -5009,7 +5039,7 @@ function updateSendState() {
   $("send").textContent = "↑";
 }
 
-// —— 计划模式 / 会话目标 / 发文件（对齐官方 Codex App 的 ➕ 菜单）——
+// —— 计划模式 / 会话目标 / 发文件（对齐官方 ChatGPT App 的 ➕ 菜单）——
 function setPlanMode(on) {
   app.planMode = on;
   $("planck").textContent = on ? "✓" : "";
@@ -5065,7 +5095,7 @@ async function attachTextFile(file) {
   updateSendState();
 }
 
-// 剪贴板贴图：手机上「截图 → 复制 → 贴给 Codex」是高频路径
+// 剪贴板贴图：手机上「截图 → 复制 → 贴给 ChatGPT」是高频路径
 async function pasteImage() {
   if (!navigator.clipboard?.read) {
     showBanner(t("banner.noclipread"));
@@ -5950,7 +5980,7 @@ function procFinish(item, aborted = false) {
   if (!reading) p.wrap.classList.remove("open");
 }
 
-// ===== Claude 独立渲染路径（gate 在 isClaudeItem / app.agent === "claude"；Codex 路径不触及）=====
+// ===== Claude 独立渲染路径（gate 在 isClaudeItem / app.agent === "claude"；ChatGPT 路径不触及）=====
 // Claude 条目：富信封 { message:{content[]}, uuid, ... } 无 payload，一条消息含多块 → 展开成多气泡。
 function isClaudeItem(item) {
   return !!item && typeof item === "object"
@@ -6387,7 +6417,10 @@ function trackCodexActivity(item) {
   if (ty !== "response_item") return;
   const pt = String(p.type || "").toLowerCase();
   if (pt === "function_call" || pt === "custom_tool_call") {
-    app.actVerb = codexToolVerb(p.name);
+    const name = pt === "custom_tool_call"
+      ? describeCustomToolCall(p.name, p.input).activity
+      : p.name;
+    app.actVerb = codexToolVerb(name);
   } else if (pt.includes("reasoning")) {
     app.actVerb = t("act.think");
   } else if (pt === "image_generation_call") {
@@ -6406,7 +6439,7 @@ function desktopIdleArm() {
 }
 
 // Claude 桌面驱动会话的运行态推断：daemon 只把"自己驱动的 turn"标 running，围观本地 claude 会话时
-// known.running 恒 false，而 Claude 的 tail 又没有 Codex 那种 task_started 事件。故用 live 增量近似：
+// known.running 恒 false，而 Claude 的 tail 又没有 ChatGPT/codex 那种 task_started 事件。故用 live 增量近似：
 // 有增量即视为运行中（driver=desktop），拿 assistant 的 stop_reason:end_turn 精确收尾，
 // 空闲兜底由 tailRunning 内的 desktopIdleArm 统一挂。
 function claudeTailPulse() {
@@ -6414,9 +6447,9 @@ function claudeTailPulse() {
   tailRunning(true);                    // driver 落 desktop（rising edge 会重置 token 计数）
 }
 
-// 输入框占位随当前 agent 变（i18n 串里写死了 "Codex"，按名替换）
+  // 输入框占位随当前 agent 变（i18n 串里写死了 "ChatGPT"，按名替换）
 function inputPh() {
-  return t("input.ph").replace("Codex", app.agent === "claude" ? "Claude" : "Codex");
+  return t("input.ph").replace("ChatGPT", app.agent === "claude" ? "Claude" : "ChatGPT");
 }
 
 function renderInto(items, live = false) {
@@ -6425,7 +6458,7 @@ function renderInto(items, live = false) {
   // 回放（从头读）：新内容追加在下方，读者自己往下滚，绝不替他跳到末尾
   const stick = !app.replayMode && !app.loadingEarlier && nearBottom();
   const frag = document.createDocumentFragment();
-  // 桌面驱动运行中：任何 live 增量都说明还活着，续空闲兜底（Codex 长轮次没有逐批脉冲，
+  // 桌面驱动运行中：任何 live 增量都说明还活着，续空闲兜底（ChatGPT/codex 长轮次没有逐批脉冲，
   // 只在 task_started 点亮一次，不续的话超过兜底窗口会被误判结束）
   if (live && app.driver === "desktop") desktopIdleArm();
   // 桌面驱动 Claude 会话的运行态推断（见 claudeTailPulse）：先点亮，本批 token 才会被计入
@@ -6435,7 +6468,7 @@ function renderInto(items, live = false) {
       && (it.message?.role || it.type) === "assistant" && it.message?.stop_reason === "end_turn");
     if (!claudeEndTurn) claudeTailPulse(); // 中途增量：运行中；仅含 end_turn 的收尾批不点亮
   }
-  // Codex 运行中按原顺序平铺过程节点；task_complete 时再创建过程组并收拢中间内容。
+  // ChatGPT 运行中按原顺序平铺过程节点；task_complete 时再创建过程组并收拢中间内容。
   // Claude 全程内联，仍由 end_turn 钉每轮总结。
   let lastAssistantNode = null;
   let pendingUserBubble = null;
@@ -6469,7 +6502,7 @@ function renderInto(items, live = false) {
     return !at || !bt || at === bt;
   };
   // 单条气泡 → 节点（codex 与 Claude 共用；Claude 一条消息含多块，逐块调用）。
-  // Claude 全程内联（对标终端 scrollback）；Codex 运行中也平铺显示，完成后统一折叠中间过程。
+  // Claude 全程内联（对标终端 scrollback）；ChatGPT 运行中也平铺显示，完成后统一折叠中间过程。
   const inline = app.agent === "claude";
   const emitBubbleNow = (bubble, sourceItem) => {
     if (!bubble) return;

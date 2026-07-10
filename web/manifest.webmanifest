@@ -1,7 +1,7 @@
 {
   "name": "C叉叉",
   "short_name": "C叉叉",
-  "description": "在手机上远程查看和接管电脑上的 Codex 会话",
+  "description": "在手机上远程查看和接管电脑上的 ChatGPT 会话",
   "lang": "zh-CN",
   "start_url": "./",
   "scope": "./",

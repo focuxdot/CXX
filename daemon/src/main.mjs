@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CXX daemon 入口（C叉叉 — 官方 Codex 的独立手机远程控制）
+// CXX daemon 入口（C叉叉 — ChatGPT/codex CLI 的独立手机远程控制）
 // 用法：
 //   node daemon/src/main.mjs start [--config <path>] [--relay <wss://...>] [--codex <cmd>]
 //   node daemon/src/main.mjs pair  [--config <path>]
@@ -120,16 +120,16 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
   if (codexVersion.belowMin) {
     throw new Error(
       `codex 版本过低：检测到「${codexVersion.raw}」，本程序要求 ≥ ${MIN_CODEX_VERSION}。` +
-        `请升级官方 Codex（如 brew upgrade codex 或 npm i -g @openai/codex），再重试。`,
+        `请升级官方 ChatGPT/codex CLI（如 brew upgrade codex 或 npm i -g @openai/codex），再重试。`,
     );
   }
   if (codexVersion.raw) log(`codex 版本: ${codexVersion.raw}（最低要求 ${MIN_CODEX_VERSION}）`);
   else log(`未能读取 codex 版本（--version 无输出或格式未知），跳过版本校验，继续启动`);
-  // 选一个空闲端口：默认 19271 常被官方 Codex remote-control/app-server 守护进程占用，
+  // 选一个空闲端口：默认 19271 常被官方 ChatGPT/codex remote-control/app-server 守护进程占用，
   // 我们跑自己的 app-server 实例，不能与官方抢端口——被占则退到系统分配的临时端口。
   const { port: appServerPort, fallback } = await resolveAppServerPort(config.appServerPort);
   if (fallback) {
-    log(`app-server 首选端口 ${config.appServerPort} 被占用（可能是官方 Codex），改用 ${appServerPort}`);
+    log(`app-server 首选端口 ${config.appServerPort} 被占用（可能是官方 ChatGPT/codex），改用 ${appServerPort}`);
   }
   // 起新引擎前先清理上次崩溃/被强杀遗留的 codex（正常 stop 不会有残留；此为兜底）
   const appServerPidFile = join(dirname(configPath), "app-server.pid");
@@ -147,7 +147,7 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
     const errText = String(err?.message ?? err);
     const hint =
       resolvedCodex === "codex" || /ENOENT/.test(errText)
-        ? "：未找到 codex，请先安装官方 Codex（codex --version 应可用），或用 --codex <路径> 指定"
+        ? "：未找到 codex，请先安装官方 ChatGPT/codex CLI（codex --version 应可用），或用 --codex <路径> 指定"
         : /EPERM|EACCES/i.test(errText)
           ? "：无法执行 codex，请确认 Windows 上指向的是 codex.exe/codex.cmd；如当前是 codex.ps1，可用 --codex 指定同目录的 codex.cmd"
         : "";
@@ -204,7 +204,7 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
       const name = await sessionName(sessionId);
       // 注：codex-zh 的「桌面 GUI 刷新横幅」依赖对官方 app.asar 的注入，本独立项目
       // 不做该注入，故不迁移 desktop-signal。手机操作链路不受影响；桌面 TUI 用户
-      // resume 会话时自然刷新。详见 README「与官方 Codex 的关系」。
+      // resume 会话时自然刷新。详见 README「与官方项目的关系」。
       if (notifier.count === 0) return;
       // 深链：点通知直达该会话（只含页面地址 + 会话 id，不含内容）
       const link = config.webUrl
@@ -212,10 +212,10 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
         : undefined;
       if (type === "approval") {
         // 审批总是推（头号阻塞）
-        await notifier.send("Codex 需要审批", `会话「${name}」有操作待你批准，请打开 Codex 远程处理`, link);
+        await notifier.send("ChatGPT 需要审批", `会话「${name}」有操作待你批准，请打开 ChatGPT 远程处理`, link);
       } else if (type === "turnCompleted" && clientsOnline === 0) {
         // 任务完成仅在无设备在线时推，避免用户正在看时打扰
-        await notifier.send("Codex 任务完成", `会话「${name}」已完成`, link);
+        await notifier.send("ChatGPT 任务完成", `会话「${name}」已完成`, link);
       }
     },
   });
@@ -230,7 +230,7 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
   // —— Claude Code 后端（可选，第二个可切换 agent）——
   // 官方 codex app-server 是常驻 JSON-RPC；Claude Code 没有等价服务，ClaudeBackend
   // 读取直接走 ~/.claude/projects 的 JSONL、写入走 claude -p 流式（见 claude-backend.mjs）。
-  // 仅当检测到 claude 二进制时注册——缺失即不提供该 agent，手机端下拉自然只剩 Codex。
+  // 仅当检测到 claude 二进制时注册——缺失即不提供该 agent，手机端下拉自然只剩 ChatGPT。
   const backends = { codex: appServer };
   const hubs = { codex: hub };
   if (claudeAvailable(config.claudeCommand)) {
@@ -289,7 +289,7 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
     hubs, // { codex, claude? }
     // 手机端下拉可选的 agent 列表（仅注册成功的后端）
     availableAgents() {
-      const label = { codex: "Codex", claude: "Claude Code" };
+      const label = { codex: "ChatGPT", claude: "Claude Code" };
       return Object.keys(backends).map((id) => ({
         id,
         name: label[id] ?? id,
@@ -466,7 +466,7 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
 // 分组按「日常最常用 → 偏运维」排列；GUI 专用的 JSON 子命令（pair-once / notify-* /
 // check-update 的机读形态）不在这里列，避免误导人手敲——人用 notify --... 这套。
 // 在无菜单栏的 headless Mac / 服务器上，这套子命令就是唯一入口。
-const HELP = `CXX（C叉叉）— 用手机远程控制本机的 Codex / Claude Code
+const HELP = `CXX（C叉叉）— 用手机远程控制本机的 ChatGPT / Claude Code
 
 用法: cxx <命令> [选项]
 
@@ -575,7 +575,7 @@ async function notifyCommand(configPath, values) {
     const notifier = new Notifier(config.notifiers, { log: (m) => console.log(m) });
     if (notifier.count === 0) { console.error("尚未配置通知渠道。"); process.exit(1); }
     console.log(`向 ${notifier.count} 个渠道发送测试通知…`);
-    await notifier.send("Codex 远程测试", "如果你收到这条，说明通知渠道配置成功 ✅");
+    await notifier.send("ChatGPT 远程测试", "如果你收到这条，说明通知渠道配置成功 ✅");
     console.log("已发送（请检查手机是否收到）。");
   }
 }

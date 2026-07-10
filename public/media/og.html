@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>CXX OG · 1280×640</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 1280px;
+      height: 640px;
+      overflow: hidden;
+      background: #06140e;
+      font-family: "PingFang SC", "Noto Sans CJK SC", "Hiragino Sans GB",
+        "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .frame {
+      position: relative;
+      width: 1280px;
+      height: 640px;
+      overflow: hidden;
+      color: #fff;
+      background:
+        radial-gradient(ellipse 90% 110% at 0% 50%, rgba(7, 193, 96, 0.32) 0%, transparent 55%),
+        radial-gradient(ellipse 50% 80% at 100% 100%, rgba(7, 193, 96, 0.10) 0%, transparent 45%),
+        linear-gradient(135deg, #06140e 0%, #0a1c14 50%, #0b1520 100%);
+    }
+
+    /* soft grid, only left half */
+    .frame::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: linear-gradient(90deg, #000 0%, #000 55%, transparent 85%);
+      pointer-events: none;
+    }
+
+    .frame::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 100% 100% at 50% 50%, transparent 60%, rgba(0,0,0,0.35) 100%);
+      pointer-events: none;
+    }
+
+    /* large watermark logo on the right */
+    .watermark {
+      position: absolute;
+      right: -40px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 520px;
+      height: 520px;
+      opacity: 0.12;
+      filter: grayscale(0.1);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .watermark img {
+      width: 100%;
+      height: 100%;
+      border-radius: 120px;
+    }
+
+    .content {
+      position: relative;
+      z-index: 1;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 72px 80px;
+      max-width: 860px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      margin-bottom: 40px;
+    }
+
+    .logo {
+      width: 112px;
+      height: 112px;
+      border-radius: 28px;
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.14),
+        0 24px 56px rgba(7, 193, 96, 0.4),
+        0 4px 16px rgba(0,0,0,0.35);
+      flex-shrink: 0;
+    }
+
+    .titles {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .name {
+      font-size: 80px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      line-height: 1;
+    }
+
+    .name-en {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.4);
+      font-family: "SF Pro Display", "Helvetica Neue", system-ui, sans-serif;
+    }
+
+    .tagline {
+      font-size: 36px;
+      font-weight: 650;
+      line-height: 1.45;
+      color: rgba(255,255,255,0.94);
+      margin-bottom: 18px;
+      max-width: 720px;
+    }
+
+    .tagline .hl {
+      color: #3dde8a;
+    }
+
+    .sub {
+      font-size: 20px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.48);
+      letter-spacing: 0.04em;
+      margin-bottom: 0;
+    }
+
+    .repo {
+      position: absolute;
+      left: 80px;
+      bottom: 40px;
+      z-index: 2;
+      font-size: 16px;
+      font-weight: 500;
+      letter-spacing: 0.03em;
+      color: rgba(255,255,255,0.28);
+      font-family: "SF Mono", "Menlo", ui-monospace, monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="watermark" aria-hidden="true">
+      <img src="../../web/icons/logo.svg" alt="" />
+    </div>
+
+    <div class="content">
+      <div class="brand">
+        <img class="logo" src="../../web/icons/logo.svg" alt="C叉叉" />
+        <div class="titles">
+          <div class="name">C叉叉</div>
+          <div class="name-en">CXX · Remote Agent Control</div>
+        </div>
+      </div>
+
+      <div class="tagline">
+        在微信里远程接管<br />
+        <span class="hl">ChatGPT</span> 与 <span class="hl">Claude Code</span>
+      </div>
+      <div class="sub">查看会话 · 审批命令 · 发起新一轮 · 端到端加密</div>
+    </div>
+
+    <div class="repo">github.com/focuxdot/CXX</div>
+  </div>
+</body>
+</html>

@@ -3,7 +3,7 @@
 // A GUI app launched from Finder/Dock inherits a minimal PATH (often just
 // /usr/bin:/bin:/usr/sbin:/sbin) — the user's shell PATH (Homebrew, ~/.local/bin,
 // nvm, etc.) is NOT present. So a bare spawn("codex") fails for exactly the users we
-// target: those who installed Codex and launch our menu-bar app by clicking it.
+// target: those who installed the ChatGPT/codex CLI and launch our menu-bar app by clicking it.
 // This probes the common install locations directly.
 import { existsSync } from "node:fs";
 import { homedir, platform } from "node:os";
