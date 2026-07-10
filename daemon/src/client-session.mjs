@@ -33,6 +33,21 @@ function sanitizeClientId(s) {
   return t.length >= 8 ? t : "";
 }
 
+// AskUserQuestion 回答是有限、纯文本的 question -> answer 映射。限制数量与长度，
+// 既保护常驻 Claude stdin，也避免把任意深对象透传到 agent 上下文。
+function sanitizeQuestionAnswers(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const out = {};
+  for (const [question, answer] of Object.entries(value)) {
+    if (Object.keys(out).length >= 8 || typeof question !== "string" || typeof answer !== "string") return null;
+    const q = question.replace(/[\x00-\x1f\x7f]/g, " ").trim().slice(0, 4000);
+    const a = answer.replace(/[\x00-\x1f\x7f]/g, " ").trim().slice(0, 4000);
+    if (!q || !a) return null;
+    out[q] = a;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 // 围观（只读）连接的方法白名单：默认拒绝，未列出的方法（含未来新增）一律 403。
 // session.watch 另有 scope 校验、image.fetch 另有会话归属校验、session.more 另有频控。
 const VIEWER_METHODS = new Set([
@@ -553,6 +568,21 @@ export class ClientSession {
           this.#reply(message.id, res);
         } catch (err) {
           this.#reply(message.id, null, { code: 500, message: `发送失败: ${err.message}` });
+        }
+        return;
+      }
+      case "question.respond": {
+        const { sessionId, toolUseId } = message.params ?? {};
+        const answers = sanitizeQuestionAnswers(message.params?.answers);
+        if (!sessionId || typeof toolUseId !== "string" || toolUseId.length > 256 || !answers) {
+          this.#reply(message.id, null, { code: 400, message: "问答回复参数非法" });
+          return;
+        }
+        try {
+          const res = await this.#hub(this.#agentOf(message.params)).answerQuestion(sessionId, toolUseId, answers);
+          this.#reply(message.id, res);
+        } catch (err) {
+          this.#reply(message.id, null, { code: 409, message: `问答回复失败: ${err.message}` });
         }
         return;
       }

@@ -28,10 +28,11 @@ process.stdin.on("data", (c) => {
     let msg;
     try { msg = JSON.parse(line); } catch { continue; }
     if (msg.type === "user") {
+      const isToolResult = msg.message?.content?.some((b) => b?.type === "tool_result");
       if (mode === "crash") process.exit(3);
       out({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "he" } } });
       out({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "llo" } } });
-      if (mode === "hang") continue;
+      if (mode === "hang" && !isToolResult) continue;
       setTimeout(() => out({ type: "result", subtype: "success", is_error: false }), 30);
     } else if (msg.type === "control_request" && msg.request?.subtype === "interrupt") {
       out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id } });
@@ -70,7 +71,9 @@ function makeBackend(mode = "ok") {
     events.push({ method, params });
     for (const w of [...waiters]) w();
   };
-  const waitFor = (pred, ms = 3000) => new Promise((resolve, reject) => {
+  // node --test 会并行拉起其它带子进程的用例；冷启动时 3 秒偶尔不够，放宽等待
+  // 不改变断言语义，只避免把调度抖动误判为 Claude 生命周期失败。
+  const waitFor = (pred, ms = 6000) => new Promise((resolve, reject) => {
     let timer = null;
     const check = () => {
       const hit = events.find(pred);
@@ -135,6 +138,19 @@ test("温和中断:control_request 确认,轮次收为 turn/aborted,进程存活
   await backend.startTurn(threadId, "next");
   await waitFor((e) => e.method === "agent_message_delta");
   assert.equal(spawnCount(), 1, "中断后应复用同一进程");
+  backend.stop();
+});
+
+test("AskUserQuestion 回答写回同一常驻 turn,不会新开一轮", async () => {
+  const { backend, waitFor, spawnCount } = makeBackend("hang");
+  const threadId = tid();
+  await backend.startTurn(threadId, "先提问");
+  await waitFor((e) => e.method === "agent_message_delta");
+  await backend.answerQuestion(threadId, "toolu_question", { "是否继续？": "继续" });
+  assert.throws(() => backend.answerQuestion(threadId, "toolu_question", { "是否继续？": "继续" }), /已收到/);
+  await waitFor((e) => e.method === "turn/completed");
+  assert.equal(spawnCount(), 1, "回答只能写回原进程，不能另起 Claude 进程");
+  assert.throws(() => backend.answerQuestion(threadId, "toolu_question", { "是否继续？": "继续" }), /不再等待/);
   backend.stop();
 });
 

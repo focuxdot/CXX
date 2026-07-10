@@ -355,6 +355,14 @@ export class SessionHub {
     return { turnId };
   }
 
+  // Claude AskUserQuestion 的选择必须作为当前 turn 的 tool_result 回写，不能排队成
+  // 下一条普通消息。Codex 后端没有这个交互工具，调用方只会在 Claude 路由下进入此处。
+  async answerQuestion(threadId, toolUseId, answers) {
+    const result = await this.#appServer.answerQuestion(threadId, toolUseId, answers);
+    this.#updateAwake();
+    return result;
+  }
+
   async interrupt(threadId) {
     const turnId = this.#currentTurn.get(threadId);
     if (!turnId) return { ok: false, reason: "无进行中的轮次" };

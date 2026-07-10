@@ -253,6 +253,8 @@ export class ClaudeBackend {
   #projects = new CachedProjects(() => this.listThreads(5000));
   // Live turns: threadId -> { proc, turnId }, present only while a turn is in flight.
   #turns = new Map();
+  // 当前 AskUserQuestion 已写回的 tool_use_id：多手机同时点同一卡时只允许首个答案进入 stdin。
+  #questionResponses = new Map();
   #turnSeq = 0;
   // Persistent children: threadId -> proc record (see #spawnProc). A proc may outlive
   // many turns; it is dropped on option change, external session-file writes, idle
@@ -806,6 +808,43 @@ export class ClaudeBackend {
     return { turnId };
   }
 
+  // AskUserQuestion 暂停的是同一个 stream-json turn，不能走 startTurn（会被并发
+  // 守卫拒绝，也会把回答当成一轮全新的 prompt）。把选项结果写成 Anthropic 的
+  // tool_result block 回到当前常驻子进程，Claude 才会从原地继续。
+  answerQuestion(threadId, toolUseId, answers) {
+    const turn = this.#turns.get(threadId);
+    const proc = turn?.proc;
+    if (!proc?.turnId || proc.dead) throw new Error("该问答已不再等待回答");
+    if (typeof toolUseId !== "string" || !toolUseId.trim()) throw new Error("缺少问答调用标识");
+    const answered = this.#questionResponses.get(threadId) ?? new Set();
+    if (answered.has(toolUseId)) throw new Error("该问答已收到回答");
+    const entries = Object.entries(answers || {}).filter(([question, answer]) =>
+      typeof question === "string" && question.trim() && typeof answer === "string" && answer.trim(),
+    );
+    if (!entries.length) throw new Error("请至少回答一个问题");
+    const summary = entries.map(([question, answer]) =>
+      `${JSON.stringify(question)}=${JSON.stringify(answer)}`).join(", ");
+    const input = {
+      type: "user",
+      message: {
+        role: "user",
+        content: [{
+          type: "tool_result",
+          tool_use_id: toolUseId,
+          content: `Your questions have been answered: ${summary}. You can now continue with these answers in mind.`,
+        }],
+      },
+    };
+    try {
+      proc.child.stdin.write(`${JSON.stringify(input)}\n`);
+    } catch (err) {
+      throw new Error(`Claude 问答回传失败: ${err.message}`);
+    }
+    answered.add(toolUseId);
+    this.#questionResponses.set(threadId, answered);
+    return { ok: true };
+  }
+
   // Everything that varies per spawn. A different combination can't be applied to a
   // live child, so it forces a respawn (--settings/hook wiring is per-daemon constant).
   #turnOptsKey(overrides = {}) {
@@ -946,6 +985,7 @@ export class ClaudeBackend {
     const path = this.#findFile(threadId);
     proc.fileSize = this.#statSize(path);
     if (this.#turns.get(threadId)?.proc === proc) this.#turns.delete(threadId);
+    this.#questionResponses.delete(threadId);
     // 只有会话文件已创建才丢 pendingCwd：首轮在落盘前就失败时留着它，重试才不会跑错目录
     if (path) this.#pendingCwd.delete(threadId);
     this.#cancelApprovals(threadId, "CXX: 轮次已结束");

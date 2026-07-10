@@ -526,6 +526,24 @@ try {
   .tool.open .tool-body { display: block; }
   .tool-body .tout { display: none; border-top: 1px dashed var(--border);
                      margin-top: 8px; padding-top: 8px; }
+  /* Claude AskUserQuestion：不是工具详情，而是会暂停当前 turn 的真人交互卡。 */
+  .question { border: 1px solid var(--accent); background: var(--raised); border-radius: 12px;
+              margin: 10px 0; padding: 13px; }
+  .question .qhead { color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .35px; }
+  .question .qitem { margin-top: 13px; }
+  .question .qtitle { font-size: 15px; line-height: 1.45; font-weight: 600; }
+  .question .qoptions { display: grid; gap: 7px; margin-top: 8px; }
+  .question .qoption { width: 100%; display: block; text-align: left; border: 1px solid var(--border);
+                       border-radius: 9px; padding: 9px 10px; color: var(--text); background: var(--bg); cursor: pointer; }
+  .question .qoption.sel { border-color: var(--accent); background: var(--accent-bg); }
+  .question .qlabel { display: block; font-size: 14px; font-weight: 600; }
+  .question .qdesc { display: block; margin-top: 2px; color: var(--dim); font-size: 12.5px; line-height: 1.35; }
+  .question .qother { box-sizing: border-box; width: 100%; margin-top: 7px; border: 1px solid var(--border);
+                      border-radius: 8px; padding: 8px 10px; color: var(--text); background: var(--bg); font: inherit; font-size: 14px; }
+  .question .qsend { width: 100%; margin-top: 13px; border: none; border-radius: 9px; padding: 10px;
+                     color: var(--bg); background: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+  .question .qsend:disabled, .question.answered .qoption, .question.answered .qother { opacity: .55; cursor: default; }
+  .question .qresult { margin-top: 11px; color: var(--dim); font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
   /* 过程组：一轮任务的中间步骤（命令/工具/文件改动/过渡性回复）收纳容器。
      运行中摊开实时看，出最终回复后自动收拢成一行摘要（类似 ChatGPT 的 Worked for…） */
   .proc { margin: 10px 0; }
@@ -566,7 +584,7 @@ try {
   .todos .tmark { flex: none; width: 14px; text-align: center; color: var(--dim); }
   .todos .titem.done .tmark { color: var(--ok); }
   .todos .titem.done .ttxt { color: var(--dim); text-decoration: line-through; }
-  .todos .titem.doing .tmark { color: var(--accent); }
+  .todos .titem.doing .tmark { color: var(--warn); }
   .todos .titem.doing .ttxt { color: var(--text); font-weight: 600; }
   .todos .titem.todo .ttxt { color: var(--text); }
   /* 活动行：跟随内容滚动、待在信息流末尾的一行实时状态 */
@@ -2010,7 +2028,7 @@ const AGENT_UI_READY = new Set(["codex", "claude"]);
 const AGENT_ROUTED = new Set([
   "sessions.list", "projects.list", "session.watch", "session.unwatch", "session.more",
   "session.send", "session.new", "session.start", "session.fork", "session.archive", "session.unarchive",
-  "project.archive", "turn.interrupt", "approval.respond",
+  "project.archive", "turn.interrupt", "approval.respond", "question.respond",
   "models.list", "goal.get", "goal.set", "image.fetch", "image.push",
   "share.create", "share.list", "share.react",
 ]);
@@ -3086,6 +3104,114 @@ function attachToolOutput({ callId, text, code }) {
   return null; // 已并入，无新节点
 }
 
+function questionNode({ callId, questions }) {
+  const wrap = document.createElement("div");
+  wrap.className = "question";
+  const head = document.createElement("div");
+  head.className = "qhead";
+  head.textContent = "需要你的选择";
+  wrap.appendChild(head);
+  const states = [];
+  for (const raw of Array.isArray(questions) ? questions : []) {
+    const q = raw && typeof raw === "object" ? raw : {};
+    const question = String(q.question || "").trim();
+    if (!question) continue;
+    const item = document.createElement("div");
+    item.className = "qitem";
+    const title = document.createElement("div");
+    title.className = "qtitle";
+    title.textContent = q.header ? `${q.header} · ${question}` : question;
+    const options = document.createElement("div");
+    options.className = "qoptions";
+    const state = { question, multi: q.multiSelect === true, selected: new Set(), other: null, buttons: [] };
+    for (const optRaw of Array.isArray(q.options) ? q.options : []) {
+      const opt = optRaw && typeof optRaw === "object" ? optRaw : {};
+      const label = String(opt.label || "").trim();
+      if (!label) continue;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "qoption";
+      const labelEl = document.createElement("span");
+      labelEl.className = "qlabel";
+      labelEl.textContent = label;
+      button.appendChild(labelEl);
+      if (opt.description) {
+        const desc = document.createElement("span");
+        desc.className = "qdesc";
+        desc.textContent = String(opt.description);
+        button.appendChild(desc);
+      }
+      button.onclick = () => {
+        if (wrap.classList.contains("answered")) return;
+        if (!state.multi) state.selected.clear();
+        if (state.selected.has(label)) state.selected.delete(label);
+        else state.selected.add(label);
+        for (const entry of state.buttons) entry.button.classList.toggle("sel", state.selected.has(entry.label));
+        updateSend();
+      };
+      state.buttons.push({ label, button });
+      options.appendChild(button);
+    }
+    const other = document.createElement("input");
+    other.className = "qother";
+    other.placeholder = "其他回答（可选）";
+    other.maxLength = 4000;
+    other.oninput = updateSend;
+    state.other = other;
+    item.append(title, options, other);
+    wrap.appendChild(item);
+    states.push(state);
+  }
+  const result = document.createElement("div");
+  result.className = "qresult";
+  const send = document.createElement("button");
+  send.type = "button";
+  send.className = "qsend";
+  send.textContent = "提交回答";
+  const answers = () => Object.fromEntries(states.map((state) => {
+    const other = state.other?.value.trim();
+    const value = [...state.selected, ...(other ? [other] : [])].join(", ");
+    return [state.question, value];
+  }));
+  function updateSend() {
+    send.disabled = !states.length || states.some((state) => !state.selected.size && !state.other?.value.trim());
+  }
+  send.onclick = async () => {
+    if (send.disabled || !callId || app.agent !== "claude" || !app.currentId) return;
+    send.disabled = true;
+    wrap.classList.add("answering");
+    result.textContent = "正在提交…";
+    try {
+      await app.session.request("question.respond", { sessionId: app.currentId, toolUseId: callId, answers: answers() }, 30000);
+      // 等 session tail 的 tool_result 做最终确认，避免写入失败或别的设备抢答时本地误显示已完成。
+      result.textContent = "已提交，等待 Claude 继续…";
+    } catch (err) {
+      wrap.classList.remove("answering");
+      result.textContent = "";
+      updateSend();
+      showBanner(`提交回答失败: ${err.message}`);
+    }
+  };
+  wrap.append(result, send);
+  updateSend();
+  if (callId) app.questionNodes.set(callId, { wrap, result, send, states });
+  return wrap;
+}
+
+function attachQuestionResult({ callId, text }) {
+  const ref = callId ? app.questionNodes.get(callId) : null;
+  if (!ref) return null;
+  ref.wrap.classList.remove("answering");
+  ref.wrap.classList.add("answered");
+  ref.send.remove();
+  for (const state of ref.states) {
+    for (const { button } of state.buttons) button.disabled = true;
+    state.other.disabled = true;
+  }
+  ref.result.textContent = text || "已回答";
+  return null;
+}
+
 // 每个文件：路径标题 + 着色 diff 行（会话流的改动卡与审批卡共用）
 function appendDiffFiles(container, files) {
   for (const f of files) {
@@ -3423,6 +3549,7 @@ const app = {
   planMode: false,         // 计划模式（会话级，切换会话即复位）
   ctxPct: null,            // 本会话上下文用量百分比（token_count 事件回填，暂不常显）
   toolNodes: new Map(),    // call_id -> {stat, tout}，输出到达时并入调用行
+  questionNodes: new Map(), // AskUserQuestion tool_use_id -> 交互卡；tool_result 到达后就地标已答
   proc: null,              // 进行中的过程组 {wrap, body, label, count, startTs}，task_complete 时收拢
   seenImages: new Set(),   // 已渲染的 imageRef id（生成图多帧进度去重）
   drafts: new Map(),       // sessionId -> 未发送的输入草稿（会话间不串）
@@ -5163,7 +5290,7 @@ async function openSession(id, title, opts = {}) {
   app.pendingWatch = !!(opts.fresh || opts.draft);
   app.running = false;
   app.echoes = [];
-  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.desktopIdle); app.desktopIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
+  app.toolNodes.clear(); app.questionNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.desktopIdle); app.desktopIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
   app.todoCollapsed = false; // 折叠态是会话级选择：进会话复位；快照重放（加载更早/重连）不动它
   app.seenImages.clear();
   app.sawFunctionCalls = false;
@@ -5274,7 +5401,7 @@ async function closeSession() {
   app.pendingWatch = false;
   app.echoes = [];
   app.suppressUserImages = 0;
-  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.desktopIdle); app.desktopIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
+  app.toolNodes.clear(); app.questionNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.desktopIdle); app.desktopIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
   app.stream = null;
   app.proc = null;
   app.permState = null;
@@ -6897,6 +7024,10 @@ function claudeItemToBubbles(item) {
         if (b.id) app.todoCalls.add(b.id); // 记下 id，好吞掉它的 tool_result 回执
         continue; // 计划/任务清单由 trackClaudeActivity 单独渲染在流末尾
       }
+      if (/^askuserquestion$/i.test(b.name || "")) {
+        out.push({ cls: "question", callId: b.id ?? null, questions: b.input?.questions });
+        continue;
+      }
       const input = b.input ?? {};
       const diffFiles = claudeEditDiffFiles(b.name, input);
       if (diffFiles) {
@@ -6910,6 +7041,10 @@ function claudeItemToBubbles(item) {
       });
     } else if (bt === "tool_result") {
       if (b.tool_use_id && app.todoCalls.has(b.tool_use_id)) continue; // TodoWrite/Task* 的回执：噪音，吞掉（TaskCreate 的 id 绑定已在 trackClaudeActivity 完成）
+      if (b.tool_use_id && app.questionNodes.has(b.tool_use_id)) {
+        out.push({ cls: "questionout", callId: b.tool_use_id, text: claudeToolResultText(b.content) });
+        continue;
+      }
       out.push({
         cls: "toolout", callId: b.tool_use_id ?? null,
         text: claudeToolResultText(b.content), code: b.is_error ? 1 : 0,
@@ -6999,6 +7134,15 @@ function todosNode(todos) {
   return wrap;
 }
 
+// 流尾固定件：任务清单和活动行不能只在任务变化时才挪动；Claude 后续的普通文本、
+// 工具输出或流式草稿到达时，也必须把它们重新压回末尾，才能对齐 Claude Code 的固定任务栏。
+function pinTailWidgets() {
+  const log = $("log");
+  if (app.todoNode) log.appendChild(app.todoNode);
+  const act = $("actline");
+  if (act) log.appendChild(act);
+}
+
 // 计划清单钉在流末尾、就地更新（空清单则撤下）
 function updateTodos(todos) {
   if (!Array.isArray(todos) || !todos.length) {
@@ -7007,7 +7151,7 @@ function updateTodos(todos) {
     return;
   }
   app.todoNode = todosNode(todos);
-  $("log").appendChild(app.todoNode); // 移到流末尾（活动行随后再追加到它之后）
+  pinTailWidgets();
 }
 
 // 信息流末尾的实时活动行：● 当前动词… 耗时；Claude 额外显示本轮输出 token
@@ -7296,6 +7440,13 @@ function renderInto(items, live = false) {
       node = attachToolOutput(bubble); // 通常并入已有调用行，返回 null
       trackProcNode(node, "toolout", sourceItem);
       toProc = false;
+    } else if (bubble.cls === "question") {
+      node = questionNode(bubble);
+      trackProcNode(node, "question", sourceItem);
+      toProc = false;
+    } else if (bubble.cls === "questionout") {
+      node = attachQuestionResult(bubble);
+      toProc = false;
     } else if (bubble.cls === "diff") {
       node = diffNode(bubble);
       trackProcNode(node, "diff", sourceItem, true);
@@ -7386,8 +7537,9 @@ function renderInto(items, live = false) {
   // 有真实内容渲染时，清掉"新会话"空态提示（否则增量消息会追加在它下面）
   if (frag.firstChild) $("emptyhint")?.remove();
   $("log").appendChild(frag);
-  // 计划清单 + 活动行始终同步到信息流末尾（顺序：内容 → 计划 → 活动行）
+  // 每批新内容都重钉任务清单；此前仅 pendingTodos 时才移动，普通后续输出会把清单留在中间。
   if (app.pendingTodos) { updateTodos(app.pendingTodos); app.pendingTodos = null; }
+  pinTailWidgets();
   updateActLine();
   if (stick) scrollToBottom();
   updateJump();
@@ -7408,8 +7560,7 @@ function appendStream(delta) {
     const stick = !app.loadingEarlier && nearBottom();
     $("log").appendChild(el);
     // Claude 活动行/计划清单始终垫在流最末，别被流式草稿挤到上面
-    if (app.todoNode) $("log").appendChild(app.todoNode);
-    const act = $("actline"); if (act) $("log").appendChild(act);
+    pinTailWidgets();
     if (stick) scrollToBottom();
     app.stream = { el, raw, text: "" };
   }
@@ -7662,7 +7813,7 @@ function onLive(event, params) {
 function renderFullSnapshotItems(items, { snapshotEnd = false, loadedCount = null } = {}) {
   if (!app.replayMode && loadedCount != null) setHistoryLoadedCount(loadedCount);
   $("log").innerHTML = "";
-  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.desktopIdle); app.desktopIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
+  app.toolNodes.clear(); app.questionNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.desktopIdle); app.desktopIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
   app.seenImages.clear(); // 快照重放会重发同批 imageRef
   app.stream = null; // 元素已随 log 清空
   app.proc = null;
@@ -7919,7 +8070,7 @@ async function switchDaemon(id) {
   updateStatusPill();
   app.view = "list"; app.currentId = null;
   app.echoes = [];
-  app.toolNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.desktopIdle); app.desktopIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
+  app.toolNodes.clear(); app.questionNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.desktopIdle); app.desktopIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
   app.seenImages.clear();
   app.stream = null;
   app.proc = null;

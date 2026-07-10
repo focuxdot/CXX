@@ -89,10 +89,11 @@ daemon 可同时服务多个 agent 后端（`codex` 显示为 ChatGPT，`claude`
 //                    {"id":"claude","name":"Claude Code","healthy":true}]}  // 仅注册成功的后端
 ```
 
-- **带 `agent` 的方法**：`sessions.list`、`projects.list`、`session.watch`、`session.send`、`session.new`、`session.start`、`session.fork`、`session.archive`、`session.unarchive`、`project.archive`、`turn.interrupt`、`goal.*`、`models.list`、`approval.respond`、`share.create`、`share.list`、`share.react`。缺省 `codex`；未注册的 agent 回落 `codex`。
+- **带 `agent` 的方法**：`sessions.list`、`projects.list`、`session.watch`、`session.send`、`session.new`、`session.start`、`session.fork`、`session.archive`、`session.unarchive`、`project.archive`、`turn.interrupt`、`goal.*`、`models.list`、`approval.respond`、`question.respond`、`share.create`、`share.list`、`share.react`。缺省 `codex`；未注册的 agent 回落 `codex`。
 - `sessions.list` 应答回带 `agent` 字段确认所属后端。
 - **审批跨 agent 路由**：`approval.request`/`approval.resolved` 通知携带 `agent`。审批 key 带 agent 前缀全局唯一（如 `codex-a1` / `claude-a1`，客户端视为不透明字符串）；手机端应把 `agent` 原样回填到 `approval.respond` 以直达正确的 hub，未回填时 daemon 按 key 跨 hub 兜底查找——错投至多"未命中"，不会决策错投。
 - **会话条目形状按 agent 不同**：codex 是 rollout（`{timestamp,type,payload}`）；claude 是 Anthropic 消息结构（`{type:"user"|"assistant"|"system"|...,message:{role,content:[blocks]},uuid,parentUuid,cwd,...}`，块类型 `text/thinking/tool_use/tool_result`）。web 端按 `agent` 走各自独立渲染路径，不强行统一。
+- **Claude 问答**：`AskUserQuestion` 的 `tool_use` 在手机端渲染为选项卡；提交走 `question.respond {sessionId,toolUseId,answers}`（`answers` 为问题文本到回答文本的映射）。daemon 将其写回仍在运行的 Claude stream-json 子进程，作为同一轮的 `tool_result`，不能降级为 `session.send` 新轮。
 
 ### 3.2 会话查看
 
