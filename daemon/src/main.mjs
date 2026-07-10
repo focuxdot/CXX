@@ -29,6 +29,7 @@ import {
 } from "./config.mjs";
 import { enforceDevices, watchConfig } from "./config-watch.mjs";
 import { privateKeyFromPem } from "./crypto.mjs";
+import { acquireDaemonLock, releaseDaemonLock } from "./daemon-lock.mjs";
 import { Notifier, normalizeNotifier, redact } from "./notify.mjs";
 import { MENU_COMMANDS, runMenuCommand } from "./menu-backend.mjs";
 import { makeDeps as makeMacAgentDeps } from "./mac-agent.mjs";
@@ -84,6 +85,8 @@ function makeMenuDeps({ configPath }) {
 // emit: 可选的结构化事件回调（IPC 模式下由 --ipc 提供，写 stdout JSON 行）。
 // 默认 no-op，CLI/冒烟直跑不受影响。事件形如 { event, ... }。
 export async function startDaemon({ configPath, overrides = {}, emit = () => {} }) {
+  const daemonLock = acquireDaemonLock(configPath);
+  try {
   const config = loadOrCreateConfig(configPath);
   // win32：计划任务无法重定向 stdout，daemon 自记日志到 config 同目录的 daemon.log。
   // macOS / Linux 分别由 launchd StandardOutPath、systemd StandardOutput=append 落盘，勿重复写。
@@ -510,8 +513,13 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
       for (const session of sessions.values()) session.dispose();
       sessions.clear();
       power.release();
+      releaseDaemonLock(daemonLock);
     },
   };
+  } catch (err) {
+    releaseDaemonLock(daemonLock);
+    throw err;
+  }
 }
 
 // 全局 CLI 帮助。裸 `cxx` 与 `cxx help` / `--help` 都打印它。

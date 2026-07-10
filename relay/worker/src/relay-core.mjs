@@ -51,12 +51,20 @@ export class BaseRelayRoom {
     const [clientEnd, serverEnd] = [pair[0], pair[1]];
 
     if (role === "daemon") {
-      for (const old of this.#state.getWebSockets("daemon")) {
+      // 同一个 daemonId 对应同一个 Durable Object，正常情况下绝不应有两条 daemon
+      // 长连接。过去的“新连接顶掉旧连接”会让重复启动的本地 daemon 互相踢下线：
+      // A 重连→踢 B，B 的退避重连→踢 A，永远循环并把 daemon_open 统计刷爆。
+      // 保留已在线的一端，拒绝后来者；已有连接真正关闭后，重试者会自然接管。
+      if (this.#state.getWebSockets("daemon").some((socket) => socket.readyState === 1)) {
         try {
-          old.close(1000, "replaced");
+          // 仍按 hibernatable WebSocket 接受后再关闭，确保运行时完成关闭握手；该标签
+          // 不会被 client/daemon 查询命中，也没有 attachment，故不会写入统计。
+          this.#state.acceptWebSocket(serverEnd, ["rejected-daemon"]);
+          serverEnd.close(1008, "daemon already connected");
         } catch {
-          // stale socket
+          // Closing is best-effort; never affect the active daemon.
         }
+        return new Response(null, { status: 101, webSocket: clientEnd });
       }
       this.#state.acceptWebSocket(serverEnd, ["daemon"]);
       const meta = {

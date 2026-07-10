@@ -3,6 +3,8 @@ const HEARTBEAT_MS = 25000;
 const HB_TIMEOUT_MS = 10000; // hb 发出后这么久没回包即判链路死亡（网络切换/唤醒后 TCP 假活）
 const BACKOFF_BASE_MS = 1000;
 const BACKOFF_MAX_MS = 15000; // 上限太高会让电脑唤醒后长时间假离线
+const DUPLICATE_DAEMON_CLOSE_CODE = 1008;
+const DUPLICATE_DAEMON_REASON = "daemon already connected";
 // onopen 迟迟不来的兜底：TCP/WS 握手卡死、DNS 挂起时 socket 长驻 CONNECTING，
 // onopen 与 onclose 都不触发、心跳（仅 open 后起）也不跑——无此超时即永久假离线。
 const CONNECT_TIMEOUT_MS = 15000;
@@ -96,8 +98,19 @@ export class RelayLink {
           break; // 未知帧忽略，保证向前兼容
       }
     };
-    ws.onclose = () => {
+    ws.onclose = (event = {}) => {
       clearTimeout(connectTimer);
+      // relay 已保留同 daemonId 的现存连接：这不是网络抖动，重试只会继续和另一
+      // 本地进程互相顶线。当前进程退出 relay 竞争，单实例锁则阻止今后再出现此情况。
+      if (event.code === DUPLICATE_DAEMON_CLOSE_CODE && event.reason === DUPLICATE_DAEMON_REASON) {
+        this.#closed = true;
+        if (this.#heartbeat) clearInterval(this.#heartbeat);
+        this.#heartbeat = null;
+        this.#ws = null;
+        this.#handlers.onStatus?.(false);
+        this.#handlers.log("检测到同配置 daemon 已在线，停止本实例的 relay 重连");
+        return;
+      }
       this.#onDisconnect();
     };
     ws.onerror = () => {};
