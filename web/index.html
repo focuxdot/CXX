@@ -7154,6 +7154,16 @@ function updateTodos(todos) {
   pinTailWidgets();
 }
 
+// 任务清单是“本轮过程”，不是会话级状态栏。Claude 的 Task/Todo 数据可以跨轮次留在
+// JSONL 里供后续工具继续引用，但新一轮尚未再次操作任务时，旧卡不能继续钉在流尾，
+// 否则会看起来像当前回答仍在输出上轮任务。这里只撤显示态；app.tasks 目录仍保留，
+// 本轮若随后收到 TaskUpdate/TaskList，trackClaudeActivity 会用最新快照重新挂卡。
+function hidePreviousTurnTodos() {
+  app.todoNode?.remove();
+  app.todoNode = null;
+  app.pendingTodos = null;
+}
+
 // 信息流末尾的实时活动行：● 当前动词… 耗时；Claude 额外显示本轮输出 token
 function updateActLine() {
   const log = $("log");
@@ -7212,6 +7222,8 @@ function trackClaudeActivity(item, live) {
     const c = m.content;
     const isToolResult = Array.isArray(c) && c.some((b) => b?.type === "tool_result");
     if (!isToolResult) {
+      // 加载更早历史是向当前视图前插旧轮次，不能让旧用户消息撤掉当前轮的任务卡。
+      if (!app.loadingEarlier) hidePreviousTurnTodos();
       const ts = Date.parse(item.timestamp ?? "");
       if (Number.isFinite(ts)) app.turnStartTs = ts;
     }
