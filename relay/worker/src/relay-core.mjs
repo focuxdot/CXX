@@ -51,20 +51,19 @@ export class BaseRelayRoom {
     const [clientEnd, serverEnd] = [pair[0], pair[1]];
 
     if (role === "daemon") {
-      // 同一个 daemonId 对应同一个 Durable Object，正常情况下绝不应有两条 daemon
-      // 长连接。过去的“新连接顶掉旧连接”会让重复启动的本地 daemon 互相踢下线：
-      // A 重连→踢 B，B 的退避重连→踢 A，永远循环并把 daemon_open 统计刷爆。
-      // 保留已在线的一端，拒绝后来者；已有连接真正关闭后，重试者会自然接管。
-      if (this.#state.getWebSockets("daemon").some((socket) => socket.readyState === 1)) {
+      // 同一个 daemonId 对应同一个 Durable Object。一台机器的单实例锁
+      // （daemon/src/daemon-lock.mjs）已保证同时只有一个 daemon 进程，因此“同 daemonId
+      // 的第二条连接”几乎必然是同一个 daemon 网络抖动/唤醒后重连、而其旧连接的服务端
+      // socket 尚未断干净——hibernatable WebSocket 的 readyState 仍读作 OPEN，服务端无从
+      // 区分死活。让新连接顶掉旧的僵尸连接：反过来“保旧拒新”会把死链留住、把活 daemon
+      // 永久挡在门外（客户端收 1008 曾据此永久停摆）。多进程互踢由本地锁在源头杜绝，
+      // 单进程不会同时维持两条竞争连接，故这里不会再退化成互相顶线的循环。
+      for (const old of this.#state.getWebSockets("daemon")) {
         try {
-          // 仍按 hibernatable WebSocket 接受后再关闭，确保运行时完成关闭握手；该标签
-          // 不会被 client/daemon 查询命中，也没有 attachment，故不会写入统计。
-          this.#state.acceptWebSocket(serverEnd, ["rejected-daemon"]);
-          serverEnd.close(1008, "daemon already connected");
+          old.close(1000, "replaced");
         } catch {
-          // Closing is best-effort; never affect the active daemon.
+          // 陈旧 socket；best-effort，绝不影响即将接入的新 daemon。
         }
-        return new Response(null, { status: 101, webSocket: clientEnd });
       }
       this.#state.acceptWebSocket(serverEnd, ["daemon"]);
       const meta = {

@@ -100,16 +100,12 @@ export class RelayLink {
     };
     ws.onclose = (event = {}) => {
       clearTimeout(connectTimer);
-      // relay 已保留同 daemonId 的现存连接：这不是网络抖动，重试只会继续和另一
-      // 本地进程互相顶线。当前进程退出 relay 竞争，单实例锁则阻止今后再出现此情况。
+      // 旧版 relay 会对“同 daemonId 已有连接”回 1008。本进程能运行就必然持有单实例锁
+      // （daemon-lock.mjs），没有第二个合法 daemon 能占用这个 daemonId——故这类 1008 只可能
+      // 是自己上一条连接的服务端 socket 尚未断干净造成的假阳性。绝不能据此永久停摆
+      //（曾因此假离线数小时直到手动重启），照常退避重连即可：新版 relay 会让新连接顶掉旧的。
       if (event.code === DUPLICATE_DAEMON_CLOSE_CODE && event.reason === DUPLICATE_DAEMON_REASON) {
-        this.#closed = true;
-        if (this.#heartbeat) clearInterval(this.#heartbeat);
-        this.#heartbeat = null;
-        this.#ws = null;
-        this.#handlers.onStatus?.(false);
-        this.#handlers.log("检测到同配置 daemon 已在线，停止本实例的 relay 重连");
-        return;
+        this.#handlers.log("relay 报告同 daemonId 已在线（多为自身旧连接残留），继续重连");
       }
       this.#onDisconnect();
     };

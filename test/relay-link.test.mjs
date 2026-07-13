@@ -17,7 +17,9 @@ test("daemon relay URL encodes metadata", () => {
   );
 });
 
-test("duplicate-daemon close stops relay reconnecting", async () => {
+test("duplicate-daemon (1008) close keeps reconnecting instead of standing down", async () => {
+  // 单实例锁保证本机只有一个 daemon，故 1008“同 daemonId 已在线”只可能是自身旧连接的
+  // 服务端 socket 残留造成的假阳性。它绝不能让 daemon 永久停摆，必须照常退避重连。
   const original = globalThis.WebSocket;
   const sockets = [];
   class FakeWebSocket {
@@ -45,9 +47,13 @@ test("duplicate-daemon close stops relay reconnecting", async () => {
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(sockets.length, 1);
     sockets[0].onclose?.({ code: 1008, reason: "daemon already connected" });
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    assert.equal(sockets.length, 1, "duplicate daemon close must not schedule a reconnect");
-    assert.match(logs.at(-1), /停止本实例的 relay 重连/);
+    assert.ok(
+      logs.some((line) => /继续重连/.test(line)),
+      "1008 应记录为可恢复而非永久停摆",
+    );
+    // 首次断开退避 = BACKOFF_BASE_MS(1000ms)；等它过去后应已建立第二条连接。
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    assert.equal(sockets.length, 2, "duplicate daemon close must schedule a reconnect");
   } finally {
     globalThis.WebSocket = original;
   }
