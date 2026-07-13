@@ -3810,8 +3810,7 @@ function renderDiag() {
   const relayHost = (app.session?.info.relay || "").replace(/^wss?:\/\//, "").replace(/[/?#].*$/, "");
   const pcName = app.session?.info.name || t("diag.pc");
 
-  // 直连态：链路如实画成 手机 ↔ 电脑 两点直达（数据面不经中继）；
-  // 中继退居下方"备用通道"一行——它仍承担在线状态与回落，断了要看得见
+  // 直连态：链路如实画成 手机 ↔ 电脑 两点直达（数据面不经中继）。
   if (net.direct) {
     let pcState = "ok";
     let pcSub = `${pcName} · ${t("diag.codex_ok")}`;
@@ -3826,10 +3825,6 @@ function renderDiag() {
       diagPoint(pcState, t("diag.pc"), pcSub),
     ]));
     box.appendChild(diagInfoRow(t("diag.direct"), t("diag.direct_on"), true));
-    box.appendChild(diagInfoRow(
-      t("diag.relay_backup"),
-      net.link === "ok" ? t("diag.connected_host", relayHost) : t("diag.relay_backup_down"),
-    ));
     return;
   }
   const phoneRelayLink = net.link === "ok" ? "ok" : net.link === "down" ? "down" : "";
@@ -6086,18 +6081,25 @@ const PERM_ICON = {
 };
 const EFFORT_LABEL = { low: t("effort.low"), medium: t("effort.medium"), high: t("effort.high"), xhigh: t("effort.xhigh") };
 
-// 模型短名：保留系列/档位 + 版本（gpt-5.5-codex -> GPT 5.5，claude-opus-4-8 -> Opus 4.8）。
+// 模型短名：保留系列/档位 + 版本 + 变体后缀（gpt-5.6-sol -> GPT 5.6 Sol，
+// gpt-5.4-mini -> GPT 5.4 Mini，claude-opus-4-8 -> Opus 4.8）。同版本多变体（Sol/Terra/Luna）
+// 必须保留后缀，否则选择器里三行都叫「GPT 5.6」且 modelMetaById 会认错模型。
 function shortModel(name) {
   const s = String(name || "").trim();
   if (!s) return "";
   const spaced = s.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  const cap = (w) => w[0].toUpperCase() + w.slice(1).toLowerCase();
   const claude = spaced.match(/\b(?:claude\s+)?(opus|sonnet|haiku)\s+(\d+)(?:[\s.]+(\d+))?\b/i);
   if (claude) {
-    const tier = claude[1][0].toUpperCase() + claude[1].slice(1).toLowerCase();
+    const tier = cap(claude[1]);
     return `${tier} ${claude[2]}${claude[3] ? `.${claude[3]}` : ""}`;
   }
-  const gpt = spaced.match(/\bgpt\s+(\d+)(?:[\s.]+(\d+))?\b/i);
-  if (gpt) return `GPT ${gpt[1]}${gpt[2] ? `.${gpt[2]}` : ""}`;
+  const gpt = spaced.match(/\bgpt\s+(\d+)(?:[\s.]+(\d+))?((?:\s+[a-z][a-z0-9]*)*)/i);
+  if (gpt) {
+    const ver = `GPT ${gpt[1]}${gpt[2] ? `.${gpt[2]}` : ""}`;
+    const suffix = (gpt[3] || "").trim();
+    return suffix ? `${ver} ${suffix.split(/\s+/).map(cap).join(" ")}` : ver;
+  }
   const o = spaced.match(/\bo\s*(\d+)(?:\s+([a-z][a-z0-9]*))?\b/i);
   if (o) return `O${o[1]}${o[2] ? ` ${o[2][0].toUpperCase()}${o[2].slice(1).toLowerCase()}` : ""}`;
   return spaced.replace(/^(openai|anthropic|claude|codex)\s+/i, "");
