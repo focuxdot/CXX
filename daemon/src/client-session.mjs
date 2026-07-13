@@ -53,6 +53,7 @@ function sanitizeQuestionAnswers(value) {
 const VIEWER_METHODS = new Set([
   "ping",
   "session.watch",
+  "session.watch.renew",
   "session.unwatch",
   "session.more",
   "image.fetch",
@@ -64,6 +65,8 @@ const VIEWER_METHODS = new Set([
 // 观众读放大频控：session.more 与 session.watch 都会迫使 daemon 重读整份
 // rollout（回放窗口/尾部快照），二者共用同一最小间隔
 const VIEWER_READ_MIN_INTERVAL_MS = 2000;
+const WATCH_LEASE_MIN_MS = 30_000;
+const WATCH_LEASE_MAX_MS = 120_000;
 
 // 喝彩表情枚举：无文字即无骂人、无审核、无注入面
 const REACT_EMOJI = new Set(["👏", "🔥", "❤️", "😂", "🤯"]);
@@ -222,6 +225,8 @@ export class ClientSession {
   // sessionId 发帧（跨会话串数据）。每个 await 之后校验代次，作废即放弃。
   #watchGen = 0;
   #watchToken = null; // 客户端本次 watch 自带的不透明串，原样打在快照/事件帧上（见 #watch）
+  #watchLeaseTimer = null; // 网页后台被冻结、unwatch 发不出时，租约到期自动停 tail/live 推流
+  #watchLeaseMs = 0;
   // 回放模式（观众看已结束的会话，从头读）：记文件路径与已下发条目数
   #replayPath = null;
   #replayOffset = 0;
@@ -485,11 +490,28 @@ export class ClientSession {
       case "session.watch":
         await this.#watch(message);
         return;
-      case "session.unwatch":
+      case "session.watch.renew": {
+        const wt = typeof message.params?.wt === "string" ? message.params.wt : "";
+        if (!this.#watchedThreadId || !this.#watchLeaseMs || !wt || wt !== this.#watchToken) {
+          this.#reply(message.id, null, { code: 409, message: "watch 已失效，请重新订阅" });
+          return;
+        }
+        this.#armWatchLease(this.#watchLeaseMs);
+        this.#reply(message.id, { ok: true });
+        return;
+      }
+      case "session.unwatch": {
+        const wt = typeof message.params?.wt === "string" ? message.params.wt : "";
+        // 后台 unwatch 可能跨 RTC/relay 切换后迟到；带 wt 的旧请求不得误停后来建立的新 watch。
+        if (wt && wt !== this.#watchToken) {
+          this.#reply(message.id, { ok: true, stale: true });
+          return;
+        }
         this.#watchGen++; // 使在途的旧 watch 作废（其 await 恢复后按代次放弃）
         this.#stopWatch();
         this.#reply(message.id, { ok: true });
         return;
+      }
       case "session.more": {
         // 手机端「下拉加载更早」：按更大的 limit 重发一次尾部快照
         if (this.isViewer) {
@@ -995,10 +1017,10 @@ export class ClientSession {
     }
   }
 
-  // daemon 能力回执（auth 应答）：img=图片推送流；rtc=支持局域网直连升级（rtc.offer）。
+  // daemon 能力回执（auth 应答）：img=图片推送流；rtc=局域网直连；wl=后台 watch 租约。
   // 客户端据 rtc 决定是否发起直连协商——不广播的话旧 daemon 会收到打不着的 rtc.offer
   #daemonCaps() {
-    const caps = { img: 1 };
+    const caps = { img: 1, wl: 1 };
     if (this.#daemon.rtc) caps.rtc = 1;
     return caps;
   }
@@ -1108,8 +1130,9 @@ export class ClientSession {
               role: "viewer",
               scope: { sessionId: device.scope?.sessionId ?? null, agent: device.scope?.agent ?? "codex" },
               sessionName: device.sessionName ?? "",
+              caps: { wl: 1 }, // 观众不推图，但同样需要后台 watch 租约
             }
-          : { caps: this.#daemonCaps() }), // 能力回执：图片推送（img）、直连升级（rtc）
+          : { caps: this.#daemonCaps() }), // 能力回执：图片推送（img）、直连升级（rtc）、watch 租约（wl）
       });
       this.#registerAllHubs();
       for (const id of devMerged) this.#daemon.kickDevice?.(id); // 同浏览器旧凭据若还连着，踢下线
@@ -1190,6 +1213,7 @@ export class ClientSession {
       this.#replayPath = thread.path;
       const { items, total } = await readRolloutWindow(thread.path, 0, 500);
       if (this.#watchSuperseded(gen, message.id)) return; // 读文件期间已被新 watch 接管
+      this.#armWatchLease(message.params?.leaseMs);
       this.#reply(message.id, { ok: true, mode: "replay", total });
       this.#sendItems(sessionId, items, { snapshot: true, total, replayFrom: 0 });
       this.#replayOffset = items.length;
@@ -1208,11 +1232,15 @@ export class ClientSession {
       onItems: (items, meta) => this.#sendItems(sessionId, items, meta),
       onError: (err) => this.#daemon.log(`tail ${sessionId} 失败: ${err.message}`),
     });
+    this.#armWatchLease(message.params?.leaseMs);
     this.#reply(message.id, { ok: true, mode: "tail" });
     await this.#tail.start();
   }
 
   #stopWatch() {
+    if (this.#watchLeaseTimer) clearTimeout(this.#watchLeaseTimer);
+    this.#watchLeaseTimer = null;
+    this.#watchLeaseMs = 0;
     this.#tail?.close();
     this.#tail = null;
     this.#replayPath = null;
@@ -1222,6 +1250,23 @@ export class ClientSession {
       this.#hub(this.#watchedAgent).unsubscribe(this.#watchedThreadId, this);
       this.#watchedThreadId = null;
     }
+    this.#watchToken = null;
+  }
+
+  #armWatchLease(value) {
+    const requested = Number(value);
+    if (!Number.isFinite(requested) || requested <= 0) return;
+    this.#watchLeaseMs = Math.max(WATCH_LEASE_MIN_MS, Math.min(WATCH_LEASE_MAX_MS, Math.trunc(requested)));
+    if (this.#watchLeaseTimer) clearTimeout(this.#watchLeaseTimer);
+    this.#watchLeaseTimer = setTimeout(() => {
+      this.#watchLeaseTimer = null;
+      const sid = this.#watchedThreadId;
+      if (!sid) return;
+      this.#watchGen++;
+      this.#stopWatch();
+      this.#daemon.log(`client ${this.#cid} 的 watch 租约到期，已停止会话 ${sid} 推流`);
+    }, this.#watchLeaseMs);
+    this.#watchLeaseTimer.unref?.();
   }
 
   #isFileActive(path, now) {
@@ -1256,7 +1301,13 @@ export class ClientSession {
 
   // —— hub 推送入口 ——
   pushLiveEvent(sessionId, method, params) {
-    this.#notify("session.live", { sessionId, event: method, params });
+    this.#sendLiveEvent(sessionId, method, params);
+  }
+
+  #sendLiveEvent(sessionId, method, params) {
+    const payload = { sessionId, event: method, params };
+    if (this.#watchToken) payload.wt = this.#watchToken;
+    this.#notify("session.live", payload);
   }
 
   pushApproval(approvalKey, sessionId, method, params, agent = "codex") {

@@ -2,7 +2,15 @@
 // This file intentionally contains only zero-knowledge forwarding behavior. Private
 // stats/notification hooks live under internal/ and are injected by the official entrypoint.
 
+import { daemonConnectionDecision, normalizeDaemonInstanceId } from "../../owner.mjs";
+
+export { daemonConnectionDecision } from "../../owner.mjs";
+
 const PATH_RE = /^\/v1\/(daemon|client)\/([A-Za-z0-9_-]{8,64})$/;
+
+function cleanMeta(value, max = 64) {
+  return String(value || "").replace(/[\x00-\x1f\x7f]/g, " ").trim().slice(0, max);
+}
 
 export function createRelayWorker({ serviceLabel = "cxx relay", handleRequest = null } = {}) {
   return {
@@ -44,21 +52,54 @@ export class BaseRelayRoom {
   }
 
   async fetch(request) {
-    const parsed = PATH_RE.exec(new URL(request.url).pathname);
+    const url = new URL(request.url);
+    const parsed = PATH_RE.exec(url.pathname);
     const role = parsed?.[1];
     const daemonId = parsed?.[2];
     const pair = new WebSocketPair();
     const [clientEnd, serverEnd] = [pair[0], pair[1]];
 
     if (role === "daemon") {
-      // 同一个 daemonId 对应同一个 Durable Object。一台机器的单实例锁
-      // （daemon/src/daemon-lock.mjs）已保证同时只有一个 daemon 进程，因此“同 daemonId
-      // 的第二条连接”几乎必然是同一个 daemon 网络抖动/唤醒后重连、而其旧连接的服务端
-      // socket 尚未断干净——hibernatable WebSocket 的 readyState 仍读作 OPEN，服务端无从
-      // 区分死活。让新连接顶掉旧的僵尸连接：反过来“保旧拒新”会把死链留住、把活 daemon
-      // 永久挡在门外（客户端收 1008 曾据此永久停摆）。多进程互踢由本地锁在源头杜绝，
-      // 单进程不会同时维持两条竞争连接，故这里不会再退化成互相顶线的循环。
-      for (const old of this.#state.getWebSockets("daemon")) {
+      const incomingInstanceId = normalizeDaemonInstanceId(url.searchParams.get("inst"));
+      const existing = this.#state
+        .getWebSockets("daemon")
+        .filter((socket) => socket.readyState === 1);
+      const blocking = existing.find((old) => {
+        const att = old.deserializeAttachment?.() ?? {};
+        let lastHeartbeatAt = null;
+        try {
+          lastHeartbeatAt = this.#state.getWebSocketAutoResponseTimestamp(old);
+        } catch {
+          // 较旧的本地 Workers runtime 可能还没有该 API；openedAt 宽限仍可避免刚连就互踢。
+        }
+        return daemonConnectionDecision({
+          incomingInstanceId,
+          existingInstanceId: att.instanceId ?? att.meta?.instanceId ?? "",
+          lastHeartbeatAt,
+          openedAt: att.openedAt,
+        }) === "reject";
+      });
+      if (blocking) {
+        try {
+          // 独立标签确保拒绝连接不进入 daemon 查询/统计；接受后关闭可完成 WS 关闭握手。
+          this.#state.acceptWebSocket(serverEnd, ["rejected-daemon"]);
+          serverEnd.close(1008, "daemon already connected");
+        } catch {
+          // Closing is best-effort; never affect the healthy daemon.
+        }
+        const meta = {
+          app: cleanMeta(url.searchParams.get("app"), 40),
+          os: cleanMeta(url.searchParams.get("os"), 24),
+          country: cleanMeta(request.headers.get("cf-ipcountry"), 8),
+          version: cleanMeta(url.searchParams.get("ver"), 32),
+          instanceId: incomingInstanceId,
+        };
+        this.#runHook("daemonRejected", { daemonId, meta });
+        return new Response(null, { status: 101, webSocket: clientEnd });
+      }
+
+      // 同实例旧 socket 或超过新鲜度阈值的旧/legacy socket 已不再代表健康 owner，新连接接管。
+      for (const old of existing) {
         try {
           old.close(1000, "replaced");
         } catch {
@@ -67,11 +108,13 @@ export class BaseRelayRoom {
       }
       this.#state.acceptWebSocket(serverEnd, ["daemon"]);
       const meta = {
-        app: new URL(request.url).searchParams.get("app") || "",
-        os: new URL(request.url).searchParams.get("os") || "",
-        country: request.headers.get("cf-ipcountry") || "",
+        app: cleanMeta(url.searchParams.get("app"), 40),
+        os: cleanMeta(url.searchParams.get("os"), 24),
+        country: cleanMeta(request.headers.get("cf-ipcountry"), 8),
+        version: cleanMeta(url.searchParams.get("ver"), 32),
+        instanceId: incomingInstanceId,
       };
-      serverEnd.serializeAttachment({ daemonId, openedAt: Date.now(), meta });
+      serverEnd.serializeAttachment({ daemonId, openedAt: Date.now(), instanceId: incomingInstanceId, meta });
       const clientCount = this.#state.getWebSockets("client").length;
       this.#runHook("daemonOpen", {
         daemonId,
@@ -133,6 +176,7 @@ export class BaseRelayRoom {
       return;
     }
     const tags = this.#state.getTags(ws);
+    if (tags.includes("rejected-daemon")) return;
     if (tags.includes("daemon")) {
       this.#fromDaemon(ws, frame, raw.length);
     } else {
@@ -140,8 +184,10 @@ export class BaseRelayRoom {
     }
   }
 
-  async webSocketClose(ws) {
+  async webSocketClose(ws, code = 0, reason = "", wasClean = false) {
     const tags = this.#state.getTags(ws);
+    // fetch 已单独记录 daemonRejected；拒绝 socket 不是 client，关闭时不得再污染 clientClose。
+    if (tags.includes("rejected-daemon")) return;
     if (tags.includes("daemon")) {
       const others = this.#state.getWebSockets("daemon").filter((s) => s !== ws);
       if (others.length === 0) {
@@ -153,7 +199,12 @@ export class BaseRelayRoom {
       this.#runHook("daemonClose", {
         daemonId: att?.daemonId,
         durationSec: secondsSince(att?.openedAt),
-        meta: att?.meta,
+        meta: {
+          ...(att?.meta ?? {}),
+          closeReason: cleanMeta(reason, 80),
+        },
+        code,
+        wasClean,
       });
       return;
     }

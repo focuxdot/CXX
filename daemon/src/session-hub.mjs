@@ -3,6 +3,13 @@
 // - 订阅表：谁在看某会话（转发流式事件）
 // - 审批表：待决策的服务端请求（广播给所有设备，任一设备可决策，先到先得）
 // 见 public/PROTOCOL.md §3。
+
+function isLiveTextDelta(method, params) {
+  const norm = String(method).toLowerCase().replace(/[/_.-]/g, "");
+  if (!norm.includes("agentmessage") || !norm.includes("delta")) return false;
+  return ["delta", "text", "chunk"].some((name) => typeof params?.[name] === "string" && params[name]);
+}
+
 export class SessionHub {
   #appServer;
   #log;
@@ -29,6 +36,7 @@ export class SessionHub {
   #congestionTickMs;
   #congestionAfterMs;
   #linkStats = new Map(); // deviceId -> {sessionId, visitors, peak, reactions}（内存，重启即清）
+  #liveDeltaStats = new Map(); // threadId -> 原始 app-server delta 到达间隔（每轮结束写一条低频日志）
 
   // 本 hub 归属的 agent（codex / claude）。审批 key 是各 hub 独立计数器（a1,a2…），
   // 跨 hub 会撞号——审批通知带上 agent，手机据此把 approval.respond 路由到正确的 hub。
@@ -473,6 +481,8 @@ export class SessionHub {
   #onNotification(method, params) {
     const threadId = params?.threadId;
     if (!threadId) return;
+    if (method === "turn/started") this.#liveDeltaStats.delete(threadId);
+    this.#recordLiveDelta(threadId, method, params);
     if (method === "thread/archived" || method === "thread/unarchived") {
       this.#appServer.invalidateProjects?.();
       this.#broadcastBoard(threadId, { archived: method === "thread/archived" });
@@ -492,11 +502,48 @@ export class SessionHub {
         this.#onEvent("turnCompleted", { sessionId: threadId, clientsOnline: this.#clients.size });
       }
     }
+    this.#broadcastLive(threadId, method, params);
+    if (method === "turn/completed" || method === "turn/failed" || method === "turn/aborted") {
+      this.#logLiveDeltaStats(threadId);
+    }
+  }
+
+  #recordLiveDelta(threadId, method, params) {
+    if (!isLiveTextDelta(method, params) || !this.#subscribers.get(threadId)?.size) return;
+    const now = Date.now();
+    let stats = this.#liveDeltaStats.get(threadId);
+    if (!stats) {
+      stats = { count: 0, firstAt: now, lastAt: 0, gapTotal: 0, minGap: Infinity, maxGap: 0 };
+      this.#liveDeltaStats.set(threadId, stats);
+    }
+    if (stats.lastAt) {
+      const gap = Math.max(0, now - stats.lastAt);
+      stats.gapTotal += gap;
+      stats.minGap = Math.min(stats.minGap, gap);
+      stats.maxGap = Math.max(stats.maxGap, gap);
+    }
+    stats.count += 1;
+    stats.lastAt = now;
+  }
+
+  #logLiveDeltaStats(threadId) {
+    const stats = this.#liveDeltaStats.get(threadId);
+    this.#liveDeltaStats.delete(threadId);
+    if (!stats) return;
+    const gaps = Math.max(0, stats.count - 1);
+    const avgGap = gaps ? Math.round(stats.gapTotal / gaps) : 0;
+    const durationMs = Math.max(0, stats.lastAt - stats.firstAt);
+    this.#log(
+      `delta 采样: agent=${this.#agent} session=${threadId} raw=${stats.count} ` +
+        `duration=${durationMs}ms avgGap=${avgGap}ms minGap=${gaps ? stats.minGap : 0}ms ` +
+        `maxGap=${stats.maxGap}ms`,
+    );
+  }
+
+  #broadcastLive(threadId, method, params) {
     const subs = this.#subscribers.get(threadId);
     if (!subs) return;
-    for (const client of subs) {
-      client.pushLiveEvent(threadId, method, params);
-    }
+    for (const client of subs) client.pushLiveEvent(threadId, method, params);
   }
 
   #onServerRequest(id, method, params) {

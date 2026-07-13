@@ -1,8 +1,17 @@
 // daemon 与 relay 的出站长连接：注册、心跳、指数退避重连、按 cid 路由
+import { randomUUID } from "node:crypto";
+
 const HEARTBEAT_MS = 25000;
 const HB_TIMEOUT_MS = 10000; // hb 发出后这么久没回包即判链路死亡（网络切换/唤醒后 TCP 假活）
 const BACKOFF_BASE_MS = 1000;
-const BACKOFF_MAX_MS = 15000; // 上限太高会让电脑唤醒后长时间假离线
+const BACKOFF_MAX_MS = 60000;
+// 连上即掉的病态循环不能每次都从 1s 开始。10 次短连接/2min 后进入 2~5min 冷却；
+// 正常连接收到第一拍 hb 后清空计数，电脑唤醒/偶发抖动仍能快速恢复。
+const SHORT_CONNECTION_MS = HEARTBEAT_MS;
+const STORM_WINDOW_MS = 2 * 60_000;
+const STORM_THRESHOLD = 10;
+const STORM_COOLDOWN_MIN_MS = 2 * 60_000;
+const STORM_COOLDOWN_JITTER_MS = 3 * 60_000;
 const DUPLICATE_DAEMON_CLOSE_CODE = 1008;
 const DUPLICATE_DAEMON_REASON = "daemon already connected";
 // onopen 迟迟不来的兜底：TCP/WS 握手卡死、DNS 挂起时 socket 长驻 CONNECTING，
@@ -12,14 +21,43 @@ const CONNECT_TIMEOUT_MS = 15000;
 export function daemonRelayUrl(
   relayUrl,
   daemonId,
-  { platform = globalThis.process?.platform, app = "cxx" } = {},
+  {
+    platform = globalThis.process?.platform,
+    app = "cxx",
+    version = "",
+    instanceId = "",
+  } = {},
 ) {
   const base = relayUrl.replace(/\/$/, "");
   const params = new URLSearchParams();
   if (platform) params.set("os", String(platform));
   if (app) params.set("app", String(app));
+  if (version) params.set("ver", String(version));
+  if (instanceId) params.set("inst", String(instanceId));
   const query = params.toString();
   return `${base}/v1/daemon/${daemonId}${query ? `?${query}` : ""}`;
+}
+
+export function reconnectDelay(attempt, random = Math.random) {
+  const cap = Math.min(BACKOFF_BASE_MS * 2 ** Math.max(0, attempt), BACKOFF_MAX_MS);
+  return Math.round(Math.max(0, Math.min(1, Number(random()) || 0)) * cap);
+}
+
+export function reconnectStormCooldown(shortDisconnects, now = Date.now(), random = Math.random) {
+  const recent = shortDisconnects.filter((at) => now - at <= STORM_WINDOW_MS);
+  if (recent.length < STORM_THRESHOLD) return { recent, delay: 0 };
+  const r = Math.max(0, Math.min(1, Number(random()) || 0));
+  return {
+    recent,
+    delay: STORM_COOLDOWN_MIN_MS + Math.round(r * STORM_COOLDOWN_JITTER_MS),
+  };
+}
+
+// relay 已明确证明另一实例仍健康时，不走普通断线的秒级恢复节奏；低频探测既允许
+// owner 退出后自动接管，也避免永久冲突实例持续消耗 Worker WebSocket 请求配额。
+export function ownerConflictRetryDelay(random = Math.random) {
+  const r = Math.max(0, Math.min(1, Number(random()) || 0));
+  return STORM_COOLDOWN_MIN_MS + Math.round(r * STORM_COOLDOWN_JITTER_MS);
 }
 
 export class RelayLink {
@@ -30,10 +68,18 @@ export class RelayLink {
   #heartbeat = null;
   #lastPong = 0;
   #closed = false;
+  #connectedAt = 0;
+  #shortDisconnects = [];
+  #random;
 
-  constructor(relayUrl, daemonId, handlers) {
-    this.#url = daemonRelayUrl(relayUrl, daemonId);
+  constructor(relayUrl, daemonId, handlers, {
+    version = "",
+    instanceId = randomUUID(),
+    random = Math.random,
+  } = {}) {
+    this.#url = daemonRelayUrl(relayUrl, daemonId, { version, instanceId });
     this.#handlers = handlers;
+    this.#random = random;
   }
 
   start() {
@@ -66,8 +112,8 @@ export class RelayLink {
     connectTimer.unref?.();
     ws.onopen = () => {
       clearTimeout(connectTimer);
-      this.#attempt = 0;
       this.#ws = ws;
+      this.#connectedAt = Date.now();
       this.#lastPong = Date.now();
       this.#handlers.log(`已连接 relay: ${this.#url}`);
       this.#handlers.onStatus?.(true);
@@ -93,6 +139,11 @@ export class RelayLink {
           break;
         case "hb":
           this.#lastPong = Date.now();
+          // open 只证明握手成功，不证明连接稳定；第一拍 25s 心跳往返成功后才清退避。
+          if (this.#ws === ws) {
+            this.#attempt = 0;
+            this.#shortDisconnects.length = 0;
+          }
           break;
         default:
           break; // 未知帧忽略，保证向前兼容
@@ -100,12 +151,12 @@ export class RelayLink {
     };
     ws.onclose = (event = {}) => {
       clearTimeout(connectTimer);
-      // 旧版 relay 会对“同 daemonId 已有连接”回 1008。本进程能运行就必然持有单实例锁
-      // （daemon-lock.mjs），没有第二个合法 daemon 能占用这个 daemonId——故这类 1008 只可能
-      // 是自己上一条连接的服务端 socket 尚未断干净造成的假阳性。绝不能据此永久停摆
-      //（曾因此假离线数小时直到手动重启），照常退避重连即可：新版 relay 会让新连接顶掉旧的。
+      // relay 对“不同实例且旧连接最近仍有心跳”回 1008；旧 relay 也可能把自身残留 socket
+      // 判成冲突。不能把 1008 当终态（旧 owner 退出后本实例应自然接管），但健康 owner
+      // 已被明确确认，直接转 2~5min 低频探测，不能沿用普通断线的秒级恢复节奏。
       if (event.code === DUPLICATE_DAEMON_CLOSE_CODE && event.reason === DUPLICATE_DAEMON_REASON) {
-        this.#handlers.log("relay 报告同 daemonId 已在线（多为自身旧连接残留），继续重连");
+        this.#onDisconnect(ownerConflictRetryDelay(this.#random), "owner-conflict");
+        return;
       }
       this.#onDisconnect();
     };
@@ -128,15 +179,35 @@ export class RelayLink {
     }, HB_TIMEOUT_MS).unref?.();
   }
 
-  #onDisconnect() {
+  #onDisconnect(minDelay = 0, reason = "") {
+    const now = Date.now();
+    if (this.#connectedAt && now - this.#connectedAt < SHORT_CONNECTION_MS) {
+      this.#shortDisconnects.push(now);
+    }
+    this.#connectedAt = 0;
+    const storm = reconnectStormCooldown(this.#shortDisconnects, now, this.#random);
+    this.#shortDisconnects = storm.recent;
     if (this.#heartbeat) clearInterval(this.#heartbeat);
     this.#heartbeat = null;
     this.#ws = null;
     this.#handlers.onStatus?.(false);
     if (this.#closed) return;
-    const delay = Math.min(BACKOFF_BASE_MS * 2 ** this.#attempt, BACKOFF_MAX_MS);
+    let delay = reconnectDelay(this.#attempt, this.#random);
     this.#attempt += 1;
-    this.#handlers.log(`relay 连接断开，${Math.round(delay / 1000)}s 后重连`);
+    delay = Math.max(delay, minDelay);
+    if (reason === "owner-conflict") {
+      this.#handlers.log(
+        `relay 报告同 daemonId 有健康 owner，${Math.round(delay / 1000)}s 后低频探测接管`,
+      );
+    } else if (storm.delay > 0) {
+      delay = Math.max(delay, storm.delay);
+      this.#handlers.log(
+        `relay 检测到短连接风暴（${this.#shortDisconnects.length} 次/${Math.round(STORM_WINDOW_MS / 60000)}min），` +
+          `${Math.round(delay / 1000)}s 后再试`,
+      );
+    } else {
+      this.#handlers.log(`relay 连接断开，${Math.max(0, Math.round(delay / 1000))}s 后重连`);
+    }
     setTimeout(() => this.#connect(), delay).unref?.();
   }
 

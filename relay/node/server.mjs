@@ -6,6 +6,7 @@ import { createServer } from "node:http";
 import { parseArgs } from "node:util";
 
 import { upgradeConnection } from "./ws-server.mjs";
+import { daemonConnectionDecision, normalizeDaemonInstanceId } from "../owner.mjs";
 
 export function parsePath(pathname) {
   const match = /^\/v1\/(daemon|client)\/([A-Za-z0-9_-]{8,64})$/.exec(pathname);
@@ -20,7 +21,7 @@ export function createRelayServer({ log = () => {} } = {}) {
   function room(daemonId) {
     let r = rooms.get(daemonId);
     if (!r) {
-      r = { daemon: null, clients: new Map(), nextCid: 1, lastSeen: null, epoch: 0 };
+      r = { daemon: null, daemonMeta: null, clients: new Map(), nextCid: 1, lastSeen: null, epoch: 0 };
       rooms.set(daemonId, r);
     }
     return r;
@@ -48,8 +49,20 @@ export function createRelayServer({ log = () => {} } = {}) {
     const r = room(target.daemonId);
 
     if (target.role === "daemon") {
-      r.daemon?.close(); // 新连接顶掉旧连接
+      const incomingInstanceId = normalizeDaemonInstanceId(url.searchParams.get("inst"));
+      if (r.daemon && daemonConnectionDecision({
+        incomingInstanceId,
+        existingInstanceId: r.daemonMeta?.instanceId,
+        lastHeartbeatAt: r.daemonMeta?.lastHeartbeatAt,
+        openedAt: r.daemonMeta?.openedAt,
+      }) === "reject") {
+        conn.close(1008, "daemon already connected");
+        log(`daemon 接入被拒（健康 owner 已在线）: ${target.daemonId}`);
+        return;
+      }
+      r.daemon?.close(1000, "replaced");
       r.daemon = conn;
+      r.daemonMeta = { instanceId: incomingInstanceId, openedAt: Date.now(), lastHeartbeatAt: 0 };
       // daemon 连接纪元：客户端靠 epoch 变化得知 daemon 侧连接态已重置（顶替路径无 offline 边沿）
       r.epoch += 1;
       log(`daemon 上线: ${target.daemonId}`);
@@ -61,6 +74,7 @@ export function createRelayServer({ log = () => {} } = {}) {
         const frame = safeParse(text);
         if (!frame) return;
         if (frame.t === "hb") {
+          if (r.daemon === conn && r.daemonMeta) r.daemonMeta.lastHeartbeatAt = Date.now();
           conn.send(JSON.stringify({ t: "hb" }));
           return;
         }
@@ -76,6 +90,7 @@ export function createRelayServer({ log = () => {} } = {}) {
       conn.onClose = () => {
         if (r.daemon === conn) {
           r.daemon = null;
+          r.daemonMeta = null;
           r.lastSeen = Date.now();
           log(`daemon 下线: ${target.daemonId}`);
           for (const client of r.clients.values()) {

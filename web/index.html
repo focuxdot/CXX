@@ -1975,6 +1975,11 @@ async function deriveKey(daemonInfo) {
 // 因此收到过第一个 pong 才启用僵尸判定（能力探测，两种 relay 形态平滑升级）。
 const HB_FRAME = '{"t":"hb"}'; // 与 relay 边缘自动应答的匹配串逐字一致，不能重排/加空格
 const PING_MS = 25000;
+const WATCH_LEASE_MS = 60000;
+const WATCH_RENEW_MS = 30000;
+const WATCH_RENEW_SAFETY_MS = 15000;
+const WATCH_RENEW_RETRY_MS = 5000;
+const BACKGROUND_UNWATCH_GRACE_MS = 15000;
 const HB_VERIFY_MS = 5000;
 
 // 从 UA 解读一个便于识别的设备短标签（如「华为 · 微信 8.0.40」），鉴权时发给电脑端，
@@ -2026,7 +2031,7 @@ const AGENT_UI_READY = new Set(["codex", "claude"]);
 
 // 需按当前 agent 路由到对应后端/hub 的方法（其余走全局：auth/agents.list/share.revoke 等）
 const AGENT_ROUTED = new Set([
-  "sessions.list", "projects.list", "session.watch", "session.unwatch", "session.more",
+  "sessions.list", "projects.list", "session.watch", "session.watch.renew", "session.unwatch", "session.more",
   "session.send", "session.new", "session.start", "session.fork", "session.archive", "session.unarchive",
   "project.archive", "turn.interrupt", "approval.respond", "question.respond",
   "models.list", "goal.get", "goal.set", "image.fetch", "image.push",
@@ -2079,6 +2084,9 @@ class Session {
     this.rtcTimer = null;    // 直连重试排队
     this.rtcAttempts = 0;    // 重试退避指数（升级成功/中继重连时清零）
     this.lastAuth = null;    // 最近一次鉴权结果：直连切换/回落时重放 onReady 用
+    this.watchRenewTimer = null;
+    this.watchLeaseToken = null;
+    this.watchLeaseExpiresAt = 0;
   }
 
   async start() {
@@ -2175,6 +2183,7 @@ class Session {
   #onClose() {
     if (this.reconnectTimer) return; // 已有重连排队，避免关闭事件与失败回调重复调度
     this.stopPing();
+    this.stopWatchRenewal();
     for (const [, p] of this.pendingRequests) p.reject(new Error(t("err.disconnected")));
     this.pendingRequests.clear();
     if (this.closedByUser || this.dead) return; // 令牌终态：主动 close 触发的 onclose 不再排重连
@@ -2241,6 +2250,7 @@ class Session {
     if (ws) { ws.onclose = null; ws.onmessage = null; try { ws.close(); } catch {} }
     this.ws = null;
     this.stopPing();
+    this.stopWatchRenewal();
     for (const [, p] of this.pendingRequests) p.reject(new Error(t("err.disconnected")));
     this.pendingRequests.clear();
     if (this.closedByUser || this.dead) return;
@@ -2405,13 +2415,94 @@ class Session {
     this.ws.send(JSON.stringify({ t: "msg", data: envelope }));
   }
 
-  request(method, params = {}, timeoutMs = 15000) {
+  async request(method, params = {}, timeoutMs = 15000) {
+    if (method === "session.watch" && this.serverCaps?.wl === 1) {
+      params = { ...params, leaseMs: WATCH_LEASE_MS };
+    }
     // 直连通道就绪时数据面走直连；auth 是各通道自有的（中继重鉴权必须走中继 ws），
     // rtc.offer 是直连的信令（必须走中继转交 daemon），二者恒走中继
+    let result;
     if (this.rtc?.ready && method !== "auth" && method !== "rtc.offer") {
-      return this.rtc.request(method, params, timeoutMs);
+      result = await this.rtc.request(method, params, timeoutMs);
+    } else {
+      result = await this.relayRequest(method, params, timeoutMs);
     }
-    return this.relayRequest(method, params, timeoutMs);
+    if (method === "session.watch" && this.serverCaps?.wl === 1 && params.wt) {
+      this.#armWatchRenewal(params.wt);
+    } else if (method === "session.watch.renew" && result?.ok &&
+               params.wt === this.watchLeaseToken) {
+      this.watchLeaseExpiresAt = Date.now() + WATCH_LEASE_MS;
+    } else if (method === "session.unwatch" &&
+               (!params.wt || params.wt === this.watchLeaseToken)) {
+      this.stopWatchRenewal();
+    }
+    return result;
+  }
+
+  #armWatchRenewal(wt, refreshExpiry = true) {
+    this.pauseWatchRenewal();
+    this.watchLeaseToken = wt;
+    if (refreshExpiry) this.watchLeaseExpiresAt = Date.now() + WATCH_LEASE_MS;
+    if (document.visibilityState !== "visible") return;
+    const remaining = this.watchLeaseExpiresAt - Date.now();
+    if (remaining <= 0) {
+      this.#restartWatchAfterLeaseLoss(wt);
+      return;
+    }
+    // 正常每 30s 一拍；若浏览器冻结后只剩很短租期，立即/提前续，不再盲等完整周期。
+    const delay = Math.max(0, Math.min(WATCH_RENEW_MS, remaining - WATCH_RENEW_SAFETY_MS));
+    this.#scheduleWatchRenewal(wt, delay);
+  }
+
+  #scheduleWatchRenewal(wt, delay) {
+    this.pauseWatchRenewal();
+    if (document.visibilityState !== "visible" || wt !== this.watchLeaseToken) return;
+    this.watchRenewTimer = setTimeout(() => {
+      this.watchRenewTimer = null;
+      void this.#renewWatchLease(wt);
+    }, Math.max(0, delay));
+  }
+
+  async #renewWatchLease(wt) {
+    if (document.visibilityState !== "visible" || wt !== this.watchLeaseToken) return;
+    try {
+      await this.request("session.watch.renew", { wt });
+      if (wt === this.watchLeaseToken) this.#armWatchRenewal(wt, false);
+    } catch (err) {
+      if (wt !== this.watchLeaseToken) return;
+      if (err?.code === 409 || Date.now() >= this.watchLeaseExpiresAt) {
+        this.#restartWatchAfterLeaseLoss(wt);
+        return;
+      }
+      // 瞬时网络失败不能静默等到下一完整周期；在剩余租期内以至多 5s 的节奏重试。
+      const remaining = Math.max(0, this.watchLeaseExpiresAt - Date.now());
+      const retry = Math.min(WATCH_RENEW_RETRY_MS, Math.max(1000, Math.floor(remaining / 2)));
+      this.#scheduleWatchRenewal(wt, retry);
+    }
+  }
+
+  #restartWatchAfterLeaseLoss(wt) {
+    if (wt !== this.watchLeaseToken) return;
+    this.pauseWatchRenewal();
+    this.watchLeaseToken = null;
+    this.watchLeaseExpiresAt = 0;
+    // 复用既有重鉴权恢复入口重新 watch，并携带 have 游标补齐缺口。
+    if (document.visibilityState === "visible") this.onReady(this.lastAuth);
+  }
+
+  pauseWatchRenewal() {
+    if (this.watchRenewTimer) clearTimeout(this.watchRenewTimer);
+    this.watchRenewTimer = null;
+  }
+
+  resumeWatchRenewal() {
+    if (this.watchLeaseToken) this.#armWatchRenewal(this.watchLeaseToken, false);
+  }
+
+  stopWatchRenewal() {
+    this.pauseWatchRenewal();
+    this.watchLeaseToken = null;
+    this.watchLeaseExpiresAt = 0;
   }
 
   // 恒经中继通道的请求（request 的直连路由旁路）：信令、回落场景的中继侧收尾用
@@ -5267,6 +5358,64 @@ function newWatchToken() {
   return app.watchToken;
 }
 
+let backgroundWatchTimer = null;
+let backgroundWatchSuspended = false;
+
+function canWatchCurrentSession() {
+  return app.session && app.view === "session" && app.currentId && !isDraftSession();
+}
+
+async function watchCurrentSession(session = app.session, { resetReplay = false } = {}) {
+  if (!session || session !== app.session || !canWatchCurrentSession()) return null;
+  const sid = app.currentId;
+  const params = { sessionId: sid, wt: newWatchToken() };
+  if (app.isViewer) {
+    params.fromStart = true;
+    if (resetReplay) {
+      app.replayDone = false;
+      app.replayLoading = false;
+      app.replayLastAt = 0;
+    }
+  } else {
+    const cur = transcriptFor(sid);
+    if (cur?.ident && cur.total > 0) params.have = { total: cur.total, ident: cur.ident };
+  }
+  const result = await session.request("session.watch", params);
+  if (app.isViewer) {
+    app.replayMode = result?.mode === "replay";
+    if (typeof result?.total === "number") app.histTotal = result.total;
+    updateReplayMore();
+  }
+  return result;
+}
+
+async function suspendCurrentWatch() {
+  if (!canWatchCurrentSession() || backgroundWatchSuspended) return;
+  const wt = app.watchToken || app.session.watchLeaseToken;
+  backgroundWatchSuspended = true;
+  app.watchToken = null; // 立即作废在途带 wt 的流帧；unwatch 丢包则由 daemon 租约兜底
+  app.session.pauseWatchRenewal();
+  await app.session.request("session.unwatch", wt ? { wt } : {}).catch(() => {});
+}
+
+async function resumeCurrentWatch() {
+  const leaseExpired = !!(app.session?.watchLeaseToken &&
+    app.session.watchLeaseExpiresAt && Date.now() >= app.session.watchLeaseExpiresAt);
+  const suspended = backgroundWatchSuspended || leaseExpired;
+  backgroundWatchSuspended = false;
+  if (!canWatchCurrentSession()) return;
+  if (!suspended) {
+    app.session.resumeWatchRenewal();
+    return;
+  }
+  try {
+    await watchCurrentSession(app.session, { resetReplay: app.isViewer });
+  } catch (err) {
+    // 瞬时断线交给下一次 onReady 恢复；观众的终态仍立即落地。
+    if (app.isViewer && (err?.code === 403 || err?.code === 404)) showViewerEnded(t("viewer.gone"));
+  }
+}
+
 async function openSession(id, title, opts = {}) {
   // 手机系统返回键/右滑返回走浏览器 history：从列表进会话时压一条历史，
   // 这样系统返回会触发 popstate 回首页，而不是把整个页面/PWA 弹掉。
@@ -5377,6 +5526,9 @@ async function openSession(id, title, opts = {}) {
 }
 
 async function closeSession() {
+  if (backgroundWatchTimer) clearTimeout(backgroundWatchTimer);
+  backgroundWatchTimer = null;
+  backgroundWatchSuspended = false;
   // 未发送的草稿存起来（排队未发出的文本一并并入），回来接着写；不带进下一个会话
   const wasDraft = isDraftSession();
   if (app.currentId && !wasDraft) {
@@ -5394,6 +5546,7 @@ async function closeSession() {
   app.currentId = null;
   if (wasDraft) app.draft = null;
   app.pendingWatch = false;
+  app.session?.stopWatchRenewal();
   app.echoes = [];
   app.suppressUserImages = 0;
   app.toolNodes.clear(); app.questionNodes.clear(); app.todoNode = null; app.todoCalls.clear(); app.pendingTodos = null; app.tasks.clear(); app.taskCreates.clear(); app.taskPeeks.clear(); app.taskMode = false; clearTimeout(app.desktopIdle); app.desktopIdle = null; app.turnStartTs = 0; app.turnSummarized = false;
@@ -7861,6 +8014,12 @@ function finishDeferredFullSnapshot(s) {
 }
 
 function handleNotify(msg) {
+  // 隐藏超过 15s、已暂停 watch 后不再消费 transcript/live 帧；若浏览器先被冻结，daemon
+  // 的 60s 租约会兜底停流。回前台用 have 游标补齐，不在长期后台做 DOM/缓存工作。
+  if (document.visibilityState !== "visible" && backgroundWatchSuspended &&
+      (msg.method === "session.snapshot" || msg.method === "session.event" || msg.method === "session.live")) {
+    return;
+  }
   if (msg.method === "session.snapshot" && msg.params.sessionId === app.currentId) {
     const p = msg.params;
     // 被顶替的旧 watch 在途帧（快速重开同一会话时 sessionId 相同）：凭 wt 丢弃。
@@ -7918,6 +8077,7 @@ function handleNotify(msg) {
       else restoreEarlierScroll(); // 普通实时增量不参与 session.more 收尾，避免打断 end 定时器
     }
   } else if (msg.method === "session.live" && msg.params.sessionId === app.currentId) {
+    if (msg.params.wt && msg.params.wt !== app.watchToken) return;
     onLive(msg.params.event, msg.params.params);
   } else if (msg.method === "image.chunk") {
     onImageChunk(msg.params); // 图片推送流：按 id 拼装，不与当前会话绑定（跨视图仍有效）
@@ -8219,16 +8379,8 @@ function startSession(info) {
       if (!sid) { showViewerEnded(t("viewer.badlink")); return; }
       try {
         if (app.view === "session" && app.currentId === sid) {
-          // 重连恢复：重新 watch（回放态会从头重发首屏，v1 接受）。
-          // 回放进度一并归零——daemon 端 offset 已重置，旧的 replayDone
-          // 不清会把加载哨兵藏掉，观众永远翻不过首屏
-          app.replayDone = false;
-          app.replayLoading = false;
-          app.replayLastAt = 0;
-          const r = await session.request("session.watch", { sessionId: sid, fromStart: true, wt: newWatchToken() });
-          app.replayMode = r?.mode === "replay";
-          if (typeof r?.total === "number") app.histTotal = r.total;
-          updateReplayMore();
+          // 重连恢复：重新 watch；回放进度归零，daemon 端 offset 也已重置。
+          await watchCurrentSession(session, { resetReplay: true });
         } else {
           await openSession(sid, name, { viewer: true });
         }
@@ -8243,12 +8395,8 @@ function startSession(info) {
     prefetchModels(); // 静默：给模型胶囊补上电脑端默认模型号
     try {
       if (app.view === "session" && app.currentId && !isDraftSession()) {
-        // 重连后恢复当前会话的实时订阅。带 have 游标：命中则 daemon 只补断线期间的
-        // 增量（append 快照），已渲染的内容不清屏重放——重连不再闪屏、不再重传全量
-        const cur = transcriptFor(app.currentId);
-        const params = { sessionId: app.currentId, wt: newWatchToken() };
-        if (cur?.ident && cur.total > 0) params.have = { total: cur.total, ident: cur.ident };
-        await session.request("session.watch", params);
+        // 重连后恢复当前会话实时订阅；带 have 游标只补断线期间的缺口。
+        await watchCurrentSession(session);
       } else {
         await refreshList();
         // 通知深链：连上后直达对应会话
@@ -8696,14 +8844,28 @@ async function main() {
   $("diagsheet").onclick = (e) => { if (e.target === $("diagsheet")) $("diagsheet").classList.remove("open"); };
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
+      if (backgroundWatchTimer) clearTimeout(backgroundWatchTimer);
+      backgroundWatchTimer = null;
       app.session?.ensureAlive();
+      resumeCurrentWatch().catch(() => {});
       // 后台期间 active 复核定时器不打（见 scheduleActiveRecheck）：回前台补一次列表刷新，
       // 让"桌面活动/运行中"徽标立即对齐现状，而不是等下一个 board.changed
       if (app.session && app.view === "list" && !app.isViewer) refreshList().catch(() => {});
     } else {
       app.session?.stopPing(); // 切后台立即停心跳，不留后台流量
       app.session?.rtc?.stopPing(); // 直连通道同理（通道本身留着，回前台 verify 验活）
+      app.session?.pauseWatchRenewal();
+      if (backgroundWatchTimer) clearTimeout(backgroundWatchTimer);
+      backgroundWatchTimer = setTimeout(() => {
+        backgroundWatchTimer = null;
+        if (document.visibilityState !== "visible") suspendCurrentWatch().catch(() => {});
+      }, BACKGROUND_UNWATCH_GRACE_MS);
     }
+  });
+  // 页面被系统回收/导航离开时不等 15s；若异步发送来不及完成，daemon 端租约仍会兜底。
+  window.addEventListener("pagehide", () => {
+    app.session?.pauseWatchRenewal();
+    suspendCurrentWatch().catch(() => {});
   });
   // 蜂窝↔WiFi 切换、飞行模式恢复：不等退避计时，马上验活/重连。
   // 后台收到 online 不动作（保持零后台活动），回前台由 visibilitychange 补上

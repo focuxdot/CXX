@@ -82,9 +82,13 @@ export function upgradeConnection(req, socket) {
     send(text) {
       if (!socket.destroyed) socket.write(encodeFrame(text));
     },
-    close() {
+    close(code = 1000, reason = "") {
       if (!socket.destroyed) {
-        socket.write(encodeFrame(Buffer.alloc(0), 0x8));
+        const reasonBytes = Buffer.from(String(reason)).subarray(0, 123);
+        const payload = Buffer.alloc(2 + reasonBytes.length);
+        payload.writeUInt16BE(code, 0);
+        reasonBytes.copy(payload, 2);
+        socket.write(encodeFrame(payload, 0x8));
         socket.end();
       }
     },

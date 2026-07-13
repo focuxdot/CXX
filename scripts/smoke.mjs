@@ -101,6 +101,7 @@ ok("client 连接 relay");
 send({ id: 1, method: "auth", params: { pairToken } });
 const authResult = await nextMessage();
 if (!authResult.result?.deviceToken) fail(`配对失败: ${JSON.stringify(authResult)}`);
+if (authResult.result?.caps?.wl !== 1) fail("daemon 未声明 watch lease 能力");
 ok(`配对成功: deviceId=${authResult.result.deviceId} daemon=${authResult.result.daemonName}`);
 
 // 5. 会话列表
@@ -112,7 +113,11 @@ if (sessions.length > 0) {
   console.log(`  最近会话: ${(sessions[0].name || sessions[0].preview || "").slice(0, 60)}`);
 
   // 6. 实时查看快照
-  send({ id: 3, method: "session.watch", params: { sessionId: sessions[0].id } });
+  send({
+    id: 3,
+    method: "session.watch",
+    params: { sessionId: sessions[0].id, wt: "smoke-watch", leaseMs: 60000 },
+  });
   let snapshot = null;
   for (let i = 0; i < 5; i++) {
     const msg = await nextMessage();
@@ -126,13 +131,22 @@ if (sessions.length > 0) {
 
   // 6.5 围观路径：铸造只读链接 -> 观众连入 -> 越权矩阵 -> 撤销即踢
   // watch 之后信道里会穿插 tail/看板通知，等应答必须按 id 扫描
-  async function replyFor(id, tries = 20) {
-    for (let i = 0; i < tries; i++) {
-      const msg = await nextMessage();
+  async function replyFor(id, timeoutMs = 15000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const msg = await nextMessage(Math.max(1, deadline - Date.now()));
       if (msg.id === id) return msg;
     }
     fail(`等不到 id=${id} 的应答`);
   }
+  send({ id: 40, method: "session.watch.renew", params: { wt: "smoke-watch" } });
+  if (!(await replyFor(40)).result?.ok) fail("session.watch.renew 失败");
+  ok("session.watch 租约续期成功");
+  send({ id: 41, method: "session.unwatch", params: { wt: "stale-smoke-watch" } });
+  if (!(await replyFor(41)).result?.stale) fail("旧 wt 的 session.unwatch 未被安全忽略");
+  send({ id: 42, method: "session.watch.renew", params: { wt: "smoke-watch" } });
+  if (!(await replyFor(42)).result?.ok) fail("旧 unwatch 误停了当前 watch");
+  ok("迟到的旧 session.unwatch 不会误停新 watch");
   send({ id: 4, method: "share.create", params: { sessionId: sessions[0].id, ttl: "24h" } });
   const created = (await replyFor(4)).result;
   if (!created?.url?.includes("#d=")) fail(`share.create 失败: ${JSON.stringify(created)}`);
@@ -175,9 +189,10 @@ if (sessions.length > 0) {
     }
     vws.send(JSON.stringify({ t: "msg", data: envelope }));
   }
-  async function vReply(id, tries = 20) {
-    for (let i = 0; i < tries; i++) {
-      const msg = await vNext();
+  async function vReply(id, timeoutMs = 15000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const msg = await vNext(Math.max(1, deadline - Date.now()));
       if (msg.id === id) return msg;
     }
     fail(`观众端等不到 id=${id} 的应答`);
@@ -188,6 +203,7 @@ if (sessions.length > 0) {
   if (vAuth?.role !== "viewer" || vAuth?.scope?.sessionId !== sessions[0].id) {
     fail(`观众鉴权响应缺 role/scope: ${JSON.stringify(vAuth)}`);
   }
+  if (vAuth?.caps?.wl !== 1) fail("观众鉴权未声明 watch lease 能力");
   ok("观众鉴权成功（role=viewer，scope 正确）");
 
   // 越权矩阵：全部 403
@@ -208,10 +224,17 @@ if (sessions.length > 0) {
   ok("观众越权方法一律 403");
 
   // 本会话可看
-  vSend({ id: vid, method: "session.watch", params: { sessionId: sessions[0].id, fromStart: true } });
+  vSend({
+    id: vid,
+    method: "session.watch",
+    params: { sessionId: sessions[0].id, fromStart: true, wt: "viewer-smoke-watch", leaseMs: 60000 },
+  });
   const vWatch = await vReply(vid);
   if (!vWatch.result?.ok) fail(`观众 watch 本会话失败: ${JSON.stringify(vWatch)}`);
   ok(`观众可看本会话（mode=${vWatch.result.mode ?? "tail"}）`);
+  vid++;
+  vSend({ id: vid, method: "session.watch.renew", params: { wt: "viewer-smoke-watch" } });
+  if (!(await vReply(vid)).result?.ok) fail("观众 session.watch.renew 失败");
   vid++;
 
   // 喝彩：观众 share.react -> 双端收到聚合广播 share.reaction
