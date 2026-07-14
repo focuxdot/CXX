@@ -63,9 +63,9 @@ extension AppDelegate {
         }
 
         // —— 运行中终端（§4.8：可见性 + 电脑侧结束）——
-        stack.addArrangedSubview(sectionLabel(L("运行中的终端（\(terminals.count)）", "Running terminals (\(terminals.count))")))
+        stack.addArrangedSubview(sectionLabel(L("运行中的窗口（\(terminals.count)）", "Running windows (\(terminals.count))")))
         if terminals.isEmpty {
-            stack.addArrangedSubview(dimLabel(L("没有正在运行的终端", "No terminals running")))
+            stack.addArrangedSubview(dimLabel(L("没有正在运行的窗口", "No windows running")))
         }
         for t in terminals {
             let row = NSStackView()
@@ -128,7 +128,7 @@ extension AppDelegate {
     @objc func terminalCloseTapped(_ sender: NSButton) {
         guard let id = sender.identifier?.rawValue, !id.isEmpty else { return }
         let a = NSAlert()
-        a.messageText = L("结束这个终端？", "End this terminal?")
+        a.messageText = L("结束这个窗口？", "End this window?")
         a.informativeText = L("其中运行的程序会被终止（先尝试正常退出，随后强制结束）。",
                               "The program running inside will be terminated (graceful first, then forced).")
         a.addButton(withTitle: L("结束", "End"))

@@ -142,7 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // 有存活终端时菜单项直接带数字，点开即设置窗（含逐项「结束」）。
             let termCount = liveTerminalCount()
             add(menu,
-                termCount > 0 ? L("终端 · \(termCount)…", "Terminals · \(termCount)…")
+                termCount > 0 ? L("窗口 · \(termCount)…", "Windows · \(termCount)…")
                               : L("终端模式…", "Terminal Mode…"),
                 #selector(doTerminal))
             menu.addItem(.separator())
@@ -216,9 +216,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let live = terminals.filter { ($0["alive"] as? Bool) == true }
         if !live.isEmpty {
             let a = NSAlert()
-            a.messageText = L("仍有 \(live.count) 个终端在运行", "\(live.count) terminal(s) still running")
-            a.informativeText = L("停用远程不会结束这些终端里的程序。保留后台运行，还是全部结束？",
-                                  "Disabling remote won't stop the programs in these terminals. Keep them running, or end them all?")
+            a.messageText = L("仍有 \(live.count) 个窗口在运行", "\(live.count) window(s) still running")
+            a.informativeText = L("停用远程不会结束这些窗口里的程序。保留后台运行，还是全部结束？",
+                                  "Disabling remote won't stop the programs in these windows. Keep them running, or end them all?")
             a.addButton(withTitle: L("保留后台运行", "Keep running"))
             a.addButton(withTitle: L("全部结束", "End all"))
             a.addButton(withTitle: L("取消", "Cancel"))
