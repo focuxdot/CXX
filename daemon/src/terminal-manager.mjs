@@ -204,11 +204,14 @@ export class TerminalManager {
       const command = String(p.command ?? "");
       const isShell = command.trim() === "";
       const executable = sh.executable;
+      // 命令走「登录 + 交互」shell（-l -i -c）：非交互的 -c 不读 ~/.zshrc（别名/函数/PATH
+      // 多在这里），会导致用户在普通终端能跑的命令在这里 command not found；-i 让它加载 rc，
+      // 与用户手动开 Shell 后再敲命令的环境一致。
       const args = isShell
         ? sh.args
         : win
           ? ["-NoLogo", "-Command", command]
-          : [...sh.args, "-c", command]; // 如 ["-l","-c","claude"]
+          : [...sh.args, "-i", "-c", command]; // 如 ["-l","-i","-c","cc-wokey"]
       return {
         id: p.id,
         name: p.name,
