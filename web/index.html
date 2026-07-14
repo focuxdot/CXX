@@ -914,7 +914,7 @@ try {
               background: var(--text); color: var(--bg); font-size: 17px; cursor: pointer; }
   #termsend:disabled { opacity: .35; }
   body.termkbd #terminput, body.termkbd #termsend { display: none; }
-  /* 新建终端 Sheet */
+  /* 新建窗口 Sheet */
   .termsec { font-size: 12px; color: var(--dim); margin: 12px 2px 6px; }
   .termopt { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
              background: var(--sunken); border: 1px solid var(--border); border-radius: 10px;
@@ -1106,7 +1106,7 @@ try {
 </main>
 <button id="jump" data-i18n-aria="a11y.jump" aria-label="回到底部">↓</button>
 <div id="termhome">
-  <button id="newterm"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span data-i18n="term.new">新建终端</span></button>
+  <button id="newterm"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span data-i18n="term.new">新建窗口</span></button>
 </div>
 <div id="termbar">
   <div id="termkeys"></div>
@@ -1118,7 +1118,7 @@ try {
 </div>
 <div id="termsheet" class="sheet">
   <div class="sheetbox">
-    <div class="sheethead" data-i18n="term.new">新建终端</div>
+    <div class="sheethead" data-i18n="term.new">新建窗口</div>
     <div class="termsec" data-i18n="term.launch">启动方式</div>
     <div id="termpresets"></div>
     <div class="termsec" data-i18n="term.cwd">工作目录</div>
@@ -8962,7 +8962,7 @@ function renderTermList() {
   }
 }
 
-// —— 新建终端 Sheet（§4.3）——
+// —— 新建窗口 Sheet（§4.3）——
 // prefill：从结构化会话进入时预填当前目录与推荐 preset（§4.2）
 let termSheetSel = null; // 选中的 presetId
 async function openTermSheet(prefill = null) {
