@@ -7652,7 +7652,9 @@ function todosNode(todos) {
     row.className = `titem ${st}`;
     const mk = document.createElement("span");
     mk.className = "tmark";
-    mk.textContent = st === "done" ? "✓" : st === "doing" ? "■" : "□";
+    // ︎ = 文本呈现选择符：阻止 iOS/微信把 ■/□/✓/● 渲染成彩色 emoji 方块（"黄色框"）；
+    // doing 用实心圆点、todo 用空心圆点（对齐"圆点"观感），done 保留对勾
+    mk.textContent = st === "done" ? "✓︎" : st === "doing" ? "●︎" : "○︎";
     const tx = document.createElement("span");
     tx.className = "ttxt";
     // 进行中用 activeForm（"正在…"），否则用 content
