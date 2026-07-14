@@ -226,7 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             switch a.runModal() {
             case .alertSecondButtonReturn:
                 for t in live {
-                    if let id = t["terminalId"] as? String { backend(["terminal-close", id]) }
+                    if let id = t["terminalId"] as? String { backend(["terminal-close", "--", id]) }
                 }
             case .alertThirdButtonReturn:
                 return

@@ -85,7 +85,9 @@ extension AppDelegate {
 
     @objc func revokeTapped(_ sender: NSButton) {
         guard let id = sender.identifier?.rawValue else { return }
-        backend(["revoke", id])
+        // "--"：deviceId 可能以 "-" 开头，否则 cxx-daemon 把它当选项拒掉、撤销无效
+        // （安全相关：以 "-" 开头的设备将无法从这里撤销）。
+        backend(["revoke", "--", id])
         closeDevicesWindows()
         showDevices(backend(["devices"])["devices"] as? [[String: Any]] ?? [])
     }

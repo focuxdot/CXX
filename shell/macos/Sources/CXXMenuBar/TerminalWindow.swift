@@ -120,7 +120,9 @@ extension AppDelegate {
 
     @objc func terminalAccessTapped(_ sender: NSButton) {
         guard let id = sender.identifier?.rawValue else { return }
-        backend(["terminal-access", id, sender.state == .on ? "1" : "0"])
+        // deviceId 是 base64url 随机串，可能以 "-" 开头（约 1/32）；不加 "--" 的话
+        // cxx-daemon 的参数解析会把它当未知选项拒掉，授权静默落空、重开弹窗回弹。
+        backend(["terminal-access", "--", id, sender.state == .on ? "1" : "0"])
     }
 
     @objc func terminalCloseTapped(_ sender: NSButton) {
@@ -134,7 +136,7 @@ extension AppDelegate {
         NSApp.activate(ignoringOtherApps: true)
         guard a.runModal() == .alertFirstButtonReturn else { return }
         DispatchQueue.global(qos: .userInitiated).async {
-            backend(["terminal-close", id])
+            backend(["terminal-close", "--", id]) // terminalId 以 "t" 开头本安全，"--" 防御性一致
             DispatchQueue.main.async { self.reopenTerminalSettings() }
         }
     }
