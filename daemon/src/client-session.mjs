@@ -163,6 +163,24 @@ export function sanitizeTurnOptions(raw) {
 }
 
 export function extractImages(item, sessionId) {
+  // Claude entries carry the Anthropic Messages shape (message.content blocks, no
+  // payload). Pasted images arrive as { type:"image", source:{ type:"base64",
+  // media_type, data } } with the base64 inline — pull it into the cache (→ imageRef)
+  // so the entry stays under MAX_ITEM_CHARS; otherwise the whole message (text and
+  // all) is replaced by a truncated stub and the bubble vanishes on the phone.
+  const msg = item?.message;
+  if (item?.payload === undefined && msg && Array.isArray(msg.content)) {
+    let changed = false;
+    const content = msg.content.map((c) => {
+      if (c?.type !== "image" || c.source?.type !== "base64") return c;
+      const b64 = c.source.data;
+      if (typeof b64 !== "string" || b64.length <= 4096) return c;
+      changed = true;
+      const ref = cacheImage(b64, c.source.media_type || sniffImageMime(b64), sessionId);
+      return { type: "image", imageRef: ref ?? { tooLarge: true } };
+    });
+    return changed ? { ...item, message: { ...msg, content } } : item;
+  }
   const p = item?.payload;
   if (!p) return item;
   if (p.type === "image_generation_call" && typeof p.result === "string" && p.result.length > 4096) {
@@ -189,10 +207,15 @@ export function extractImages(item, sessionId) {
 // 收集条目里的 imageRef id（extractImages 之后的形状：payload.imageRef 或 content[].imageRef）
 function collectImageRefs(entry, out) {
   const p = entry?.payload;
-  if (!p) return;
-  if (p.imageRef?.id) out.add(p.imageRef.id);
-  if (Array.isArray(p.content)) {
-    for (const c of p.content) if (c?.imageRef?.id) out.add(c.imageRef.id);
+  if (p) {
+    if (p.imageRef?.id) out.add(p.imageRef.id);
+    if (Array.isArray(p.content)) {
+      for (const c of p.content) if (c?.imageRef?.id) out.add(c.imageRef.id);
+    }
+  }
+  const mc = entry?.message?.content; // Claude shape: refs live under message.content
+  if (Array.isArray(mc)) {
+    for (const c of mc) if (c?.imageRef?.id) out.add(c.imageRef.id);
   }
 }
 

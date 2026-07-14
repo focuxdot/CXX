@@ -96,7 +96,7 @@ try {
 
   /* 头部：居中标题 + 电脑名/状态副标题（对标官方 App 首页） */
   header { position: sticky; top: 0; z-index: 30; background: var(--raised); padding: 6px 12px;
-           display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+           display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
            align-items: center; column-gap: 10px; border-bottom: 1px solid var(--border);
            min-height: 52px; }
   #hleft, #hright { min-width: 0; display: flex; align-items: center; gap: 10px; }
@@ -1045,7 +1045,6 @@ try {
   <div class="mlabel m-session-label" data-i18n="menu.session">会话</div>
   <button data-act="archive-session" class="m-session"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/></svg><span data-i18n="menu.archive_session">归档当前会话</span></button>
   <button data-act="quick-commands" class="m-session"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v10H8l-4 4z"/><path d="M8 9h8"/><path d="M8 12h5"/></svg><span data-i18n="menu.quick_commands">快捷指令</span></button>
-  <button data-act="open-terminal" class="m-session" style="display:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span data-i18n="term.menu_open">在终端中打开此项目</span></button>
   <hr class="m-session-sep">
   <div class="mlabel" data-i18n="menu.appearance">外观</div>
   <div class="mseg" role="group" data-i18n-aria="menu.appearance" aria-label="外观">
@@ -1203,7 +1202,7 @@ try {
   <div id="termkeys" class="side-right"></div>
   <button id="termkeystoggle" data-i18n-aria="term.keys_toggle" aria-label="快捷键"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12"/></svg></button>
   <div id="terminputbar">
-    <input id="terminputfield" type="text" enterkeyhint="send" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-i18n-ph="term.input_ph" placeholder="输入命令…" />
+    <input id="terminputfield" type="text" enterkeyhint="send" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-i18n-ph="term.input_ph" placeholder="提示词…" />
     <button id="terminputsend" data-i18n-aria="term.input_send" aria-label="发送"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></svg></button>
   </div>
   <button id="terminputtoggle" data-i18n-aria="term.input_toggle" aria-label="输入框"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 8 8 12 4 16"/><line x1="11" y1="16" x2="19" y2="16"/></svg></button>
@@ -1674,12 +1673,10 @@ const I18N = {
     "term.keys_toggle": "快捷键",
     "term.input_toggle": "输入框",
     "term.input_send": "发送",
-    "term.input_ph": "输入命令…",
+    "term.input_ph": "提示词…",
     "menu.term_overlays": "悬浮按钮",
     "menu.term_keys": "快捷键钮",
     "menu.term_input": "输入框钮",
-    "term.input_ph": "发送指令…",
-    "term.menu_open": "在终端中打开此项目",
     "term.key_interrupt": "中断",
     "term.load_fail": "终端组件加载失败",
     "term.just_output": "刚刚有输出",
@@ -2073,12 +2070,10 @@ const I18N = {
     "term.keys_toggle": "Shortcut keys",
     "term.input_toggle": "Text input",
     "term.input_send": "Send",
-    "term.input_ph": "Type a command…",
+    "term.input_ph": "Prompt…",
     "menu.term_overlays": "Floating buttons",
     "menu.term_keys": "Shortcut-keys button",
     "menu.term_input": "Text-input button",
-    "term.input_ph": "Send an instruction…",
-    "term.menu_open": "Open this project in a terminal",
     "term.key_interrupt": "Interrupt",
     "term.load_fail": "Failed to load terminal component",
     "term.just_output": "active just now",
@@ -4636,9 +4631,6 @@ function updateLangChecks() {
 function updateMenuState() {
   const archive = document.querySelector('#topmenu button[data-act="archive-session"]');
   if (archive) archive.disabled = app.view !== "session" || isDraftSession() || app.isViewer;
-  // 「在终端中打开此项目」（§4.2）：仅会话视图 + 终端能力可用时出现
-  const ot = document.querySelector('#topmenu button[data-act="open-terminal"]');
-  if (ot) ot.style.display = app.view === "session" && termCapable() && !isDraftSession() ? "" : "none";
 }
 
 // —— 快捷指令：纯前端偏好，一份普通文本列表，不扩展 daemon 协议 ——
@@ -7563,6 +7555,10 @@ function claudeInjectedBubble(text) {
 // 故下游 bubbleNode/toolRow/attachToolOutput/imagesNode 全部复用；配对键 tool_use_id 塞进 callId 字段。
 // TodoWrite/TaskCreate/TaskUpdate 不走工具卡：由 trackClaudeActivity 抽成流末尾的计划/任务清单，这里连同回执一并吞掉。
 function claudeItemToBubbles(item) {
+  // isMeta 条目是 Claude Code 的簿记（贴图源路径 [Image: source:…]、尺寸备注、
+  // <local-command-caveat>、"Continue from where you left off." 等），不是用户真正
+  // 发的话——桌面端也不当轮次显示，一律吞掉。
+  if (item?.isMeta) return [];
   const m = item.message || {};
   const role = m.role || item.type || "assistant";
   const asRole = role === "user" ? "user" : "assistant";
@@ -9533,6 +9529,12 @@ async function openTerminal(terminalId, opts = {}) {
   };
   $("termscreen").innerHTML = "";
   xt.open($("termscreen"));
+  // 软键盘确认键文案：xterm 默认 helper textarea 显示「换行」；与自定义输入框一致改为「发送」
+  // （仅改 enterkeyhint 标签，Enter 仍发 \r；iOS 对 textarea 可能仍显示换行，Android 通常生效）
+  try {
+    const ta = $("termscreen").querySelector("textarea.xterm-helper-textarea");
+    if (ta) ta.setAttribute("enterkeyhint", "send");
+  } catch {}
   // 直连键盘：xterm 捕获按键 → 原始字节直发（含软键盘输入）；修饰键锁定在此变换
   xt.onData((d) => {
     if (!app.term) return;
@@ -10335,11 +10337,6 @@ async function main() {
     } else if (act === "quick-commands") {
       $("topmenu").classList.remove("open");
       openQuickCommandsSheet();
-    } else if (act === "open-terminal") {
-      // 在终端中打开此项目（§4.2）：预填当前目录；Claude 会话推荐 Claude preset
-      $("topmenu").classList.remove("open");
-      const known = app.knownById.get(app.currentId);
-      openTermSheet({ cwd: known?.cwd || null, presetId: app.agent === "claude" ? "claude" : null });
     } else if (act === "pc") {
       $("topmenu").classList.remove("open");
       openSheet();
