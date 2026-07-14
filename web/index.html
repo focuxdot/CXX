@@ -884,7 +884,7 @@ try {
   body.interminal #list, body.interminal #termlist { display: none !important; }
   /* 终端画布铺满：header 之下直到底部；软键盘弹起时用 --termkbdgap 缩短到键盘上沿 */
   #termscreen { height: calc(100dvh - 53px - var(--termkbdgap, 0px) - env(safe-area-inset-bottom)); background: #0c0e11;
-                padding: 4px 2px 0 6px; }
+                padding: 0; }
   #termscreen .xterm { height: 100%; }
   #termnotice { display: none; position: sticky; top: 53px; z-index: 10; font-size: 13px;
                 padding: 8px 12px; background: var(--warn-bg, rgba(180,140,40,.15)); color: var(--text); }
