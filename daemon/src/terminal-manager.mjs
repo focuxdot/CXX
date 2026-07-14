@@ -68,17 +68,17 @@ const PRESET_LIST_MAX = 20;
 // 抛 { code: 400 } 表示非法输入。返回落盘用的规整数组（至少 1 项）。
 export function normalizeTerminalPresets(list) {
   if (!Array.isArray(list) || list.length === 0) {
-    throw Object.assign(new Error("至少需要一个启动方式"), { code: 400 });
+    throw Object.assign(new Error("至少需要一个启动命令"), { code: 400 });
   }
   if (list.length > PRESET_LIST_MAX) {
-    throw Object.assign(new Error(`启动方式最多 ${PRESET_LIST_MAX} 个`), { code: 400 });
+    throw Object.assign(new Error(`启动命令最多 ${PRESET_LIST_MAX} 个`), { code: 400 });
   }
   const stripCtl = (s) => String(s).replace(/[\x00-\x1f\x7f]/g, "");
   const out = [];
   const seenIds = new Set();
   for (const p of list) {
     const name = stripCtl(p?.name ?? "").trim();
-    if (!name) throw Object.assign(new Error("启动方式名称不能为空"), { code: 400 });
+    if (!name) throw Object.assign(new Error("启动命令名称不能为空"), { code: 400 });
     if (name.length > PRESET_NAME_MAX) {
       throw Object.assign(new Error(`名称最长 ${PRESET_NAME_MAX} 字`), { code: 400 });
     }
@@ -294,7 +294,7 @@ export class TerminalManager {
     // executable 恒为登录 shell（必然存在）；命令不存在时由 shell 自身在终端里报
     // "command not found"，故不再做二进制存在性预检。
     const preset = (await this.#buildPresets()).find((p) => p.id === presetId);
-    if (!preset) throw Object.assign(new Error(`未知启动方式: ${presetId}`), { code: 400 });
+    if (!preset) throw Object.assign(new Error(`未知启动命令: ${presetId}`), { code: 400 });
     if (typeof cwd !== "string" || !cwd) throw Object.assign(new Error("缺少工作目录"), { code: 400 });
     let st;
     try {

@@ -1149,7 +1149,7 @@ try {
   <div class="sheetbox">
     <div class="sheethead" data-i18n="term.new">新建窗口</div>
     <div class="termsechdr">
-      <span class="termsec" data-i18n="term.launch">启动方式</span>
+      <span class="termsec" data-i18n="term.launch">启动命令</span>
       <button id="termedit" class="termeditbtn" data-i18n="term.edit">编辑</button>
     </div>
     <div id="termpresets"></div>
@@ -1161,7 +1161,7 @@ try {
 </div>
 <div id="termpresetsheet" class="sheet">
   <div class="sheetbox">
-    <div class="sheethead" id="termpresettitle" data-i18n="term.add_preset">新增启动方式</div>
+    <div class="sheethead" id="termpresettitle" data-i18n="term.add_preset">新增启动命令</div>
     <div class="termsec" data-i18n="term.p_name">名称</div>
     <input id="termpname" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40" data-i18n-ph="term.p_name_ph" placeholder="如 Claude Code">
     <div class="termsec" data-i18n="term.p_cmd">命令</div>
@@ -1588,10 +1588,10 @@ const I18N = {
     "term.mode_chat": "会话",
     "term.mode_term": "终端",
     "term.new": "新建窗口",
-    "term.launch": "启动方式",
+    "term.launch": "启动命令",
     "term.edit": "编辑",
     "term.done_edit": "完成",
-    "term.add_preset": "新增启动方式",
+    "term.add_preset": "新增启动命令",
     "term.p_name": "名称",
     "term.p_name_ph": "如 Claude Code",
     "term.p_cmd": "命令",
@@ -1599,9 +1599,9 @@ const I18N = {
     "term.p_cmd_hint": "命令留空 = 普通命令行（登录 shell）",
     "term.p_save": "保存",
     "term.p_del": "删除",
-    "term.p_del_confirm": "删除启动方式「{0}」？",
+    "term.p_del_confirm": "删除启动命令「{0}」？",
     "term.p_name_required": "请填写名称",
-    "term.p_last": "至少保留一个启动方式",
+    "term.p_last": "至少保留一个启动命令",
     "term.presets_save_fail": "保存失败：{0}",
     "term.cwd": "工作目录",
     "term.cwd_none": "没有匹配的目录，可直接在上方输入完整路径",
@@ -1637,7 +1637,7 @@ const I18N = {
     "term.take": "接管",
     "term.readonly_pulse": "当前为只读，点「接管」后可输入",
     "term.take_fail": "接管失败：{0}",
-    "term.presets_fail": "无法获取启动方式：{0}",
+    "term.presets_fail": "无法获取启动命令：{0}",
     "term.start_fail": "启动失败：{0}",
     // I18N-ZH
   },
@@ -1976,10 +1976,10 @@ const I18N = {
     "term.mode_chat": "Sessions",
     "term.mode_term": "Terminal",
     "term.new": "New Window",
-    "term.launch": "Launch with",
+    "term.launch": "Launch command",
     "term.edit": "Edit",
     "term.done_edit": "Done",
-    "term.add_preset": "Add launch option",
+    "term.add_preset": "Add launch command",
     "term.p_name": "Name",
     "term.p_name_ph": "e.g. Claude Code",
     "term.p_cmd": "Command",
@@ -1987,9 +1987,9 @@ const I18N = {
     "term.p_cmd_hint": "Leave blank = plain command line (login shell)",
     "term.p_save": "Save",
     "term.p_del": "Delete",
-    "term.p_del_confirm": "Delete launch option “{0}”?",
+    "term.p_del_confirm": "Delete launch command “{0}”?",
     "term.p_name_required": "Please enter a name",
-    "term.p_last": "Keep at least one launch option",
+    "term.p_last": "Keep at least one launch command",
     "term.presets_save_fail": "Save failed: {0}",
     "term.cwd": "Working directory",
     "term.cwd_none": "No matching directory — type a full path above",
@@ -2025,7 +2025,7 @@ const I18N = {
     "term.take": "Take over",
     "term.readonly_pulse": "Read-only — tap “Take over” to type",
     "term.take_fail": "Take over failed: {0}",
-    "term.presets_fail": "Couldn't load launch options: {0}",
+    "term.presets_fail": "Couldn't load launch commands: {0}",
     "term.start_fail": "Start failed: {0}",
     // I18N-EN
   },
