@@ -1639,6 +1639,9 @@ const I18N = {
     "term.exit_code": "已退出 · exit {0}",
     "term.rm": "关闭并移除",
     "term.closed": "已结束窗口「{0}」",
+    "term.close_confirm.title": "结束窗口「{0}」？",
+    "term.close_confirm.body": "窗口里运行的程序会被终止；需要时随时可再新建窗口。",
+    "term.close_ok": "结束",
     "term.other_device": "另一台设备",
     "term.controlled_by": "当前由「{0}」控制，本机只读",
     "term.take": "接管",
@@ -2031,6 +2034,9 @@ const I18N = {
     "term.exit_code": "Exited · exit {0}",
     "term.rm": "Close & remove",
     "term.closed": "Ended window “{0}”",
+    "term.close_confirm.title": "End window “{0}”?",
+    "term.close_confirm.body": "The program running in it will be terminated; you can open a new window anytime.",
+    "term.close_ok": "End",
     "term.other_device": "another device",
     "term.controlled_by": "Controlled by “{0}” — read-only here",
     "term.take": "Take over",
@@ -9148,7 +9154,17 @@ function setupTermRowActions(row, tv) {
   const doClose = async () => {
     suppress = Date.now() + 1600; // 抑制长按后误触发的 click
     clearPress();
-    // 不弹确认（长按本身已是明确意图，且移动即取消防误触）；结束=杀进程，随时可再开新窗口
+    const alive = tv.status === "RUNNING" || tv.status === "DETACHED" || tv.status === "CREATING";
+    if (alive) {
+      // 用网页统一样式确认框（openConfirmSheet 返回 Promise<bool>），不用系统原生 confirm
+      const ok = await openConfirmSheet({
+        title: t("term.close_confirm.title", tv.title),
+        body: t("term.close_confirm.body"),
+        okText: t("term.close_ok"),
+        icon: TRASH_SVG,
+      });
+      if (!ok) return;
+    }
     try {
       await app.session.request("terminal.close", { terminalId: tv.terminalId });
       showToast(t("term.closed", tv.title));
