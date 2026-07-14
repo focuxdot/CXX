@@ -162,8 +162,33 @@ jobs:
           if [ "${DRAFT}" = "true" ]; then
             draft_flag=(--draft)
           fi
+          # Release notes: pull this version's section out of CHANGELOG.md; fall
+          # back to a generic line if the file or section is missing.
+          VERSION="${TAG#v}"
+          : > notes.md
+          if [ -f CHANGELOG.md ]; then
+            awk -v ver="$VERSION" '
+              index($0, "## [" ver "]") == 1 { grab=1; next }
+              grab && index($0, "## [") == 1 { exit }
+              grab && $0 == "---" { exit }
+              grab {
+                if (!started && $0 ~ /^[[:space:]]*$/) next   # skip leading blanks
+                started=1; buf[n++]=$0
+              }
+              END {
+                while (n>0 && buf[n-1] ~ /^[[:space:]]*$/) n--  # drop trailing blanks
+                for (i=0;i<n;i++) print buf[i]
+              }
+            ' CHANGELOG.md > notes.md
+          fi
+          if [ -s notes.md ]; then
+            notes_args=(--notes-file notes.md)
+          else
+            notes_args=(--notes "CXX release ${TAG}.")
+          fi
           if gh release view "${TAG}" >/dev/null 2>&1; then
             gh release upload "${TAG}" release-assets/* --clobber
+            gh release edit "${TAG}" --title "CXX ${TAG}" "${notes_args[@]}"
           else
-            gh release create "${TAG}" release-assets/* "${draft_flag[@]}" --title "CXX ${TAG}" --notes "CXX release ${TAG}."
+            gh release create "${TAG}" release-assets/* "${draft_flag[@]}" --title "CXX ${TAG}" "${notes_args[@]}"
           fi
