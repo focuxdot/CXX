@@ -926,10 +926,11 @@ try {
   .termopt.on { border-color: var(--accent); background: var(--accent-bg); }
   .termopt .sub { color: var(--dim); font-size: 12px; margin-left: auto; overflow: hidden;
                   text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
-  #termcwd { width: 100%; background: var(--sunken); border: 1px solid var(--border); border-radius: 10px;
-             padding: 10px 12px; color: var(--text); font-size: 14px;
+  /* 当前目录：下划线式输入框（无背景条），与下方候选卡片区分开 */
+  #termcwd { width: 100%; background: transparent; border: none; border-bottom: 1px solid var(--border);
+             border-radius: 0; padding: 8px 2px; color: var(--text); font-size: 14px;
              font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-  #termcwd:focus { outline: none; border-color: var(--accent); }
+  #termcwd:focus { outline: none; border-bottom-color: var(--accent); }
   .termcwdhint { color: var(--dim); font-size: 12px; padding: 8px 4px 2px; }
   .termsechdr { display: flex; align-items: center; justify-content: space-between; }
   .termsechdr .termsec { margin-right: auto; }
