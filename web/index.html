@@ -880,12 +880,16 @@ try {
   /* 终端页：画布 v1 恒深色，不随 App 主题切换（§14.2） */
   #termpage { display: none; }
   body.interminal #termpage { display: block; }
-  body.interminal main { padding-bottom: 0; }
+  /* 终端页锁整页滚动：main 去内边距/宽度上限满屏，body 不滚——滚动交给 xterm 自己的回滚区 */
+  body.interminal { overflow: hidden; }
+  body.interminal main { padding: 0 !important; max-width: none; }
   body.interminal #list, body.interminal #termlist { display: none !important; }
   /* 终端画布铺满：header 之下直到底部；软键盘弹起时用 --termkbdgap 缩短到键盘上沿 */
   #termscreen { height: calc(100dvh - 53px - var(--termkbdgap, 0px) - env(safe-area-inset-bottom)); background: #0c0e11;
                 padding: 0; }
   #termscreen .xterm { height: 100%; }
+  /* 触摸滚动落在 xterm 回滚区、不外溢到整页；纵向 pan 交给它 */
+  #termscreen .xterm-viewport { touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
   #termnotice { display: none; position: sticky; top: 53px; z-index: 10; font-size: 13px;
                 padding: 8px 12px; background: var(--warn-bg, rgba(180,140,40,.15)); color: var(--text); }
   #termnotice.show { display: flex; align-items: center; gap: 10px; }
