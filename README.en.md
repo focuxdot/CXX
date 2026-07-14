@@ -23,6 +23,12 @@
 
 <sub>Scan a QR and go · ChatGPT / Claude Code session lists, session view, chat, and new turns · pin it for one-tap return from any chat</sub>
 
+<br />
+
+<img src="public/media/terminal.png" width="820" alt="Terminal mode: opencode · Claude Code · grok running remotely on a phone" />
+
+<sub>Terminal mode: drive opencode · Claude Code · grok, three terminals, remotely from a phone</sub>
+
 </div>
 
 ---
@@ -65,6 +71,7 @@ Some mobile / in-app browser engines lack WebCrypto's X25519. CXX ships a **pure
 | --- | --- |
 | 📱 **Remote takeover from your phone** | Read the conversation, approve commands/diffs, start new turns, switch model and reasoning effort, interrupt the current turn |
 | 🧠 **Two agent backends** | ChatGPT is the default backend; when the Claude Code CLI is installed, the phone UI can switch between ChatGPT and Claude Code |
+| ⌨️ **Terminal Mode** | Open a real terminal window on your computer from your phone (full-fidelity xterm.js) — run Claude Code / OpenCode / Codex / Gemini CLI or any shell remotely; sessions survive phone lock-screens and daemon restarts |
 | 🔔 **Push notifications** | Pushed to your phone when a task finishes or blocks on approval; the deep link jumps straight to that session |
 | 🔒 **End-to-end encryption** | X25519 + HKDF-SHA256 + AES-256-GCM; the zero-knowledge relay never sees your code, commands, or conversation |
 | 👀 **Read-only sharing** | Generate a read-only link to a single session to share an agent at work; viewers can watch and applaud but never enter your context |
@@ -136,6 +143,14 @@ cxx notify --list                               # list / --remove <index> to del
 > [!WARNING]
 > Notifications carry only a **summary** (event type + session name), never raw commands, code, or file paths — third-party push channels are plaintext, so this is a deliberate security constraint.
 
+### Terminal Mode (optional)
+
+Beyond structured sessions, your phone can also take over a **real terminal**: pick **Terminal** in the agent selector (top left) → **New Window**, and a terminal window opens on your computer, driven from your phone. Launch presets are auto-detected — Claude Code, OpenCode, Codex CLI, Gemini CLI, or a plain shell. The screen is rendered with xterm.js at full fidelity (ANSI / TUI / Vim all work), with two input modes: instruction mode (adapted to phone typing) and keyboard mode (raw keystrokes).
+
+- **Sessions outlive connections**: each terminal window is owned by a standalone `cxx-pty-host` process, so a phone lock-screen, a dropped connection, or even a daemon auto-update restart never kills the task inside; the screen resumes when you come back.
+- **Notification loop**: a terminal bell, process exit, or prolonged silence pushes through the notification channels above, and the deep link lands you in that terminal.
+- **Off by default, double opt-in**: open the menu-bar → **Terminal Mode…** to flip the global switch and authorize devices one by one (headless: `cxx terminal-enable 1` + `cxx terminal-access <deviceId> 1`). Read-only share links can never use the terminal; only one device can write to a window at a time — other authorized devices watch read-only and can explicitly take over.
+
 ### CLI cheat-sheet
 
 Day to day the menu-bar icon is enough; on a headless Mac / server the global `cxx` command (dropped on PATH by the installer) is the full entry point (`cxx help` for everything):
@@ -149,6 +164,11 @@ cxx devices                          # list paired devices
 cxx revoke <deviceId>                # revoke a device
 # Notifications (see previous section)
 cxx notify --list | --test | --add … # manage channels
+# Terminal Mode
+cxx terminal-status                  # global switch, per-device access, running windows
+cxx terminal-enable 1|0              # turn Terminal Mode on / off
+cxx terminal-access <deviceId> 1|0   # grant / revoke terminal access for a device
+cxx terminal-close <terminalId>      # close a terminal window
 # Misc
 cxx check-update                     # check for a new version
 cxx version                          # print version
@@ -183,7 +203,7 @@ Because `app-server` is experimental upstream, CXX guards against protocol drift
 
 ## 🧭 How it works
 
-The official ChatGPT `codex` CLI already ships `app-server` and `remote-control` subcommands, but app-server binds to `localhost` only (the official path is SSH port-forwarding) — no relay traversal, no phone side. Claude Code does not expose an equivalent persistent app-server. **CXX adds the remote-control layer for both: ChatGPT through `codex app-server`, Claude Code through local session JSONL plus the headless CLI.**
+The official ChatGPT `codex` CLI already ships `app-server` and `remote-control` subcommands, but app-server binds to `localhost` only (the official path is SSH port-forwarding) — no relay traversal, no phone side. Claude Code does not expose an equivalent persistent app-server. **CXX adds the remote-control layer for both: ChatGPT through `codex app-server`, Claude Code through local session JSONL plus the headless CLI — and Terminal Mode through a standalone `cxx-pty-host` PTY host.**
 
 ```
 Your computer                                        Phone / browser
@@ -206,6 +226,7 @@ Your computer                                        Phone / browser
 - **relay** — a zero-knowledge forwarder (matches daemon↔client by `daemonId`, forwards opaque encrypted frames, holds no keys). Runs as a Cloudflare Worker or a single Node process.
 - **web** — the phone-side page (vanilla JS + WebCrypto, no build step; falls back to a pure-JS X25519 when the browser engine lacks it).
 - **shell** — a thin native menu-bar / tray app (macOS Swift, Windows tray). A pure view: the daemon is owned by the OS keepalive service (launchd / Task Scheduler), and the shell shells out to `cxx-daemon <subcommand>` per action — quitting the tray leaves remote running. **Linux has no shell**: the same `cxx` CLI plus a systemd `--user` unit.
+- **pty-host** — the PTY host behind Terminal Mode (a static Go binary): one standalone process per terminal window, holding the unix PTY / Windows ConPTY and a 256 KiB replay buffer. The daemon talks to it over local IPC and re-attaches after an update restart, so tasks inside the terminal never die with the daemon.
 
 Everything is end-to-end encrypted: the daemon holds a long-term key whose public half ships with the pairing code; each phone connection generates an ephemeral key, both sides derive the session key independently, and the relay only ferries ciphertext it can't read. Full protocol in [public/PROTOCOL.md](./public/PROTOCOL.md).
 
@@ -226,9 +247,23 @@ No. For ChatGPT, CXX talks to the official, unpatched `codex` CLI and runs its o
 </details>
 
 <details>
+<summary><b>Will Terminal Mode take over terminals I already have open in iTerm / Terminal?</b></summary>
+
+No. Terminal Mode only controls terminal windows that CXX creates itself; it never attaches to existing processes in other terminal apps (that isn't technically possible either). It is off by default and requires both the global switch and per-device authorization on the computer. Every phone-initiated terminal is visible in the menu bar and can be closed from the computer at any time, and read-only share links can never use the terminal.
+
+</details>
+
+<details>
 <summary><b>Can the relay see my code, commands, or conversation?</b></summary>
 
 No. All application-layer content is end-to-end encrypted between the daemon and your phone. The relay is a zero-knowledge forwarder — it holds no keys or tokens and only matches by `daemonId` and ferries ciphertext frame by frame. See [public/SECURITY.md](./public/SECURITY.md).
+
+</details>
+
+<details>
+<summary><b>Why does macOS ask to let “cxx-daemon” find devices on the local network, and why does the green dot become a WiFi icon?</b></summary>
+
+CXX is trying to upgrade the relay connection to a WebRTC peer-to-peer link when your phone and computer share the same WiFi. The green dot means the relay connection is working; after local-network access is allowed and the direct link succeeds, it becomes a WiFi icon and data travels directly over the LAN, while the relay stays connected for signaling and fallback. Denying access does not break CXX — it keeps using the end-to-end encrypted relay and shows the green dot. CXX does not scan a device list; this permission is only used to connect to the paired phone.
 
 </details>
 
