@@ -896,8 +896,8 @@ try {
              background: var(--bg); border-top: 1px solid var(--border);
              padding: 6px 8px calc(8px + env(safe-area-inset-bottom)); }
   body.interminal #termbar { display: block; }
-  /* 快捷键横栏：默认收起，点浮钮展开；作为顶部一行，右侧留出浮钮空间 */
-  #termkeys { display: flex; gap: 6px; overflow-x: auto; padding: 2px 96px 8px 2px; scrollbar-width: none; }
+  /* 快捷键横栏：默认收起，点悬浮钮展开成底部一行 */
+  #termkeys { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 8px; scrollbar-width: none; }
   #termkeys::-webkit-scrollbar { display: none; }
   body:not(.termkeysopen) #termkeys { display: none; }
   #termkeys button { flex: none; min-width: 44px; min-height: 36px; border: 1px solid var(--border);
@@ -909,17 +909,14 @@ try {
   #termkeys button.latch { background: var(--accent-bg); color: var(--accent);
                            border-color: var(--accent); border-style: double; border-width: 3px; }
   #termkeys button.intr { color: var(--err); }
-  /* 浮钮组：悬于底栏右上角（输入框右上方）——模式切换 + 快捷键展开 */
-  #termfloat { position: absolute; top: 2px; right: 10px; z-index: 2; display: flex; gap: 6px; }
-  #termfloat button { height: 28px; display: inline-flex; align-items: center; justify-content: center;
-                      border: 1px solid var(--border); background: var(--raised); color: var(--dim);
-                      border-radius: 8px; padding: 0 9px; font-size: 12px; cursor: pointer; }
-  #termfloat button:active { background: var(--border); }
-  #tmodetoggle { min-width: 44px; }
-  #tmodetoggle.kbd { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
-  body.termkeysopen #termkeystoggle { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
-  /* 收起态：给输入框上方留出浮钮的悬浮带 */
-  body:not(.termkeysopen) #termcomposer { margin-top: 30px; }
+  /* 快捷键悬浮钮：固定在页面右侧约 20% 高处——各 CLI 的输入行位置不定，用大致位置而非贴输入框 */
+  #termkeystoggle { display: none; position: fixed; right: 10px; bottom: 20%; z-index: 31;
+                    width: 42px; height: 36px; align-items: center; justify-content: center;
+                    border: 1px solid var(--border); background: var(--raised); color: var(--dim);
+                    border-radius: 11px; cursor: pointer; opacity: .9;
+                    box-shadow: 0 2px 12px rgba(0,0,0,.35); }
+  body.interminal #termkeystoggle { display: inline-flex; }
+  body.termkeysopen #termkeystoggle { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); opacity: 1; }
   #termcomposer { display: flex; align-items: flex-end; gap: 8px; }
   #terminput { flex: 1; min-width: 0; background: var(--raised); border: 1px solid var(--border);
                border-radius: 12px; padding: 9px 12px; color: var(--text);
@@ -1150,15 +1147,12 @@ try {
 </div>
 <div id="termbar">
   <div id="termkeys"></div>
-  <div id="termfloat">
-    <button id="tmodetoggle" data-i18n-aria="term.mode_toggle" aria-label="输入模式">指令</button>
-    <button id="termkeystoggle" data-i18n-aria="term.keys_toggle" aria-label="快捷键"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12"/></svg></button>
-  </div>
   <div id="termcomposer">
     <textarea id="terminput" rows="1" data-i18n-ph="term.input_ph" placeholder="发送指令…"></textarea>
     <button id="termsend" aria-label="发送" disabled>↑</button>
   </div>
 </div>
+<button id="termkeystoggle" data-i18n-aria="term.keys_toggle" aria-label="快捷键"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12"/></svg></button>
 <div id="termsheet" class="sheet">
   <div class="sheetbox">
     <div class="sheethead" data-i18n="term.new">新建窗口</div>
@@ -1624,7 +1618,6 @@ const I18N = {
     "term.input_ins": "指令",
     "term.input_kbd": "键盘",
     "term.keys_toggle": "快捷键",
-    "term.mode_toggle": "切换输入模式（指令/键盘）",
     "term.input_ph": "发送指令…",
     "term.menu_open": "在终端中打开此项目",
     "term.key_interrupt": "中断",
@@ -2014,7 +2007,6 @@ const I18N = {
     "term.input_ins": "Instruct",
     "term.input_kbd": "Keyboard",
     "term.keys_toggle": "Shortcut keys",
-    "term.mode_toggle": "Switch input mode (instruction/keyboard)",
     "term.input_ph": "Send an instruction…",
     "term.menu_open": "Open this project in a terminal",
     "term.key_interrupt": "Interrupt",
@@ -9296,9 +9288,8 @@ async function openTerminal(terminalId, opts = {}) {
   setTitle(tv?.title ?? t("term.title_fallback"));
   const presets = app.termPresets?.presets ?? [];
   const preset = presets.find((p) => p.id === tv?.presetId) ?? null;
-  // 模式记忆（per preset），首次按 preset 默认（Agent=指令、Shell=键盘）
-  const savedMode = localStorage.getItem(`czr-termmode-${tv?.presetId ?? "shell"}`);
-  const mode = savedMode || (preset?.defaultInputMode === "keyboard" ? "kbd" : "ins");
+  // 只保留指令输入模式（键盘直连已移除）：打字发送 + 快捷键条覆盖特殊键
+  const mode = "ins";
   const fontSize = Math.max(10, Math.min(22, Number(localStorage.getItem("czr-termfont")) || 13));
   const xt = new window.Terminal({
     cols: tv?.cols || 80,
@@ -9565,10 +9556,6 @@ function setTermMode(mode, opts = {}) {
   const tv = termView(st.id);
   localStorage.setItem(`czr-termmode-${tv?.presetId ?? "shell"}`, mode);
   document.body.classList.toggle("termkbd", mode === "kbd");
-  // 浮钮显示当前模式：指令 / 键盘（键盘态高亮）
-  const tog = $("tmodetoggle");
-  tog.textContent = t(mode === "kbd" ? "term.input_kbd" : "term.input_ins");
-  tog.classList.toggle("kbd", mode === "kbd");
   st.latch.ctrl = st.latch.alt = false;
   renderTermKeys();
   updateTermbarHeight();
@@ -10021,7 +10008,6 @@ async function main() {
   $("termpdel").onclick = async () => { if (presetDraftIndex >= 0 && await deleteTermPreset(presetDraftIndex)) closePresetEditor(); };
   $("termpresetsheet").onclick = (e) => { if (e.target === $("termpresetsheet")) closePresetEditor(); };
   $("termkeystoggle").onclick = () => setTermKeysOpen(!document.body.classList.contains("termkeysopen"));
-  $("tmodetoggle").onclick = () => setTermMode(app.term?.inputMode === "kbd" ? "ins" : "kbd");
   $("termsend").onclick = sendTermInstruction;
   $("terminput").addEventListener("input", () => { termInputGrow(); updateTermSendState(); });
   $("terminput").addEventListener("keydown", (e) => {
