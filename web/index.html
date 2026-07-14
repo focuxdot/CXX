@@ -1623,6 +1623,7 @@ const I18N = {
     "term.silent_hr": "{0} 小时无输出",
     "term.st_creating": "正在启动",
     "term.st_running": "运行中",
+    "term.st_idle": "空闲",
     "term.st_stopping": "正在结束",
     "term.st_exited": "已退出",
     "term.st_failed": "启动失败",
@@ -2013,6 +2014,7 @@ const I18N = {
     "term.silent_hr": "idle {0}h",
     "term.st_creating": "Starting",
     "term.st_running": "Running",
+    "term.st_idle": "Idle",
     "term.st_stopping": "Stopping",
     "term.st_exited": "Exited",
     "term.st_failed": "Failed",
@@ -3963,12 +3965,19 @@ const app = {
   deepLinkTerminal: null,  // 通知深链带来的 terminalId（#t=...）
 };
 
-function showBanner(text, onTap) {
+let bannerTimer = null;
+// 横幅默认 5 秒后自动消失；带点按动作（onTap）或明确 sticky（如"正在新建…"进度）的横幅常驻，不自动消
+function showBanner(text, onTap, sticky) {
   const b = $("banner");
   b.style.display = text ? "block" : "none";
   b.textContent = text || "";
   b.classList.toggle("action", Boolean(onTap));
   b.onclick = onTap || null;
+  clearTimeout(bannerTimer);
+  bannerTimer = null;
+  if (text && !onTap && !sticky) {
+    bannerTimer = setTimeout(() => showBanner(""), 5000);
+  }
 }
 
 function isUnknownMethodError(err, method) {
@@ -7081,7 +7090,7 @@ function openDraftSession(cwd) {
 
 async function createSession(cwd) {
   $("dirsheet").classList.remove("open");
-  showBanner(t("banner.creating"));
+  showBanner(t("banner.creating"), null, true);
   try {
     const res = await app.session.request("session.new", { cwd }, 90000);
     if (res.threadId) {
@@ -9092,6 +9101,7 @@ const TERM_STATE_LABEL = {
   CREATING: ["term.st_creating", ""], RUNNING: ["term.st_running", "run"], DETACHED: ["term.st_running", "run"],
   STOPPING: ["term.st_stopping", ""], EXITED: ["term.st_exited", ""], FAILED: ["term.st_failed", "err"],
 };
+const TERM_ACTIVE_MS = 60000; // 近期有输出才算"运行中"(绿)，久无输出算"空闲"(灰)——交互式 shell/TUI 不退出但常闲置
 
 function renderTermList() {
   const box = $("termlist");
@@ -9104,12 +9114,21 @@ function renderTermList() {
   for (const tv of sorted) {
     const row = document.createElement("button");
     row.className = "termrow";
-    const [labelKey, cls] = TERM_STATE_LABEL[tv.status] ?? [null, ""];
-    const label = labelKey ? t(labelKey) : tv.status;
     const running = tv.status === "RUNNING" || tv.status === "DETACHED";
-    const sub = tv.status === "EXITED"
-      ? `exit ${tv.exitCode ?? tv.exitSignal ?? "?"}`
-      : running ? termAgo(tv.lastOutputAt) : "";
+    let label, cls, sub;
+    if (tv.status === "EXITED") {
+      label = t("term.st_exited"); cls = "";
+      sub = `exit ${tv.exitCode ?? tv.exitSignal ?? "?"}`;
+    } else if (running) {
+      // 活着 ≠ 在忙：近期有输出才绿色"运行中"，久无输出降为中性"空闲"
+      const active = tv.lastOutputAt && (Date.now() - tv.lastOutputAt) < TERM_ACTIVE_MS;
+      label = active ? t("term.st_running") : t("term.st_idle");
+      cls = active ? "run" : "";
+      sub = termAgo(tv.lastOutputAt);
+    } else {
+      const [labelKey, c] = TERM_STATE_LABEL[tv.status] ?? [null, ""];
+      label = labelKey ? t(labelKey) : tv.status; cls = c; sub = "";
+    }
     row.innerHTML = `<div class="tmain"><div class="tname"></div><div class="tsub"></div></div><span class="tstate ${cls}"></span>`;
     row.querySelector(".tname").textContent = tv.title;
     row.querySelector(".tsub").textContent = [tv.cwd, sub].filter(Boolean).join(" · ");
