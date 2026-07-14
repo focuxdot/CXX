@@ -1638,6 +1638,7 @@ const I18N = {
     "term.send_unknown": "发送结果未知：{0}",
     "term.exit_code": "已退出 · exit {0}",
     "term.rm": "关闭并移除",
+    "term.closed": "已结束窗口「{0}」",
     "term.other_device": "另一台设备",
     "term.controlled_by": "当前由「{0}」控制，本机只读",
     "term.take": "接管",
@@ -2029,6 +2030,7 @@ const I18N = {
     "term.send_unknown": "Send result unknown: {0}",
     "term.exit_code": "Exited · exit {0}",
     "term.rm": "Close & remove",
+    "term.closed": "Ended window “{0}”",
     "term.other_device": "another device",
     "term.controlled_by": "Controlled by “{0}” — read-only here",
     "term.take": "Take over",
@@ -9133,9 +9135,37 @@ function renderTermList() {
     row.querySelector(".tname").textContent = tv.title;
     row.querySelector(".tsub").textContent = [tv.cwd, sub].filter(Boolean).join(" · ");
     row.querySelector(".tstate").textContent = label;
-    row.onclick = () => openTerminal(tv.terminalId);
+    setupTermRowActions(row, tv);
     box.appendChild(row);
   }
+}
+
+// 列表行手势：轻点进窗口；长按/右键 → 结束窗口（活着的先确认，已退出的直接移除）。
+// 复用 terminal.close（与桌面托盘「结束」同一 RPC：先正常退出、再强制）。
+function setupTermRowActions(row, tv) {
+  let pressTimer = null, sx = 0, sy = 0, suppress = 0;
+  const clearPress = () => { if (pressTimer) clearTimeout(pressTimer); pressTimer = null; };
+  const doClose = async () => {
+    suppress = Date.now() + 1600; // 抑制长按后误触发的 click
+    clearPress();
+    // 不弹确认（长按本身已是明确意图，且移动即取消防误触）；结束=杀进程，随时可再开新窗口
+    try {
+      await app.session.request("terminal.close", { terminalId: tv.terminalId });
+      showToast(t("term.closed", tv.title));
+      await refreshTerminals();
+    } catch (err) { showToast(err.code === 404 ? t("term.gone") : err.message); }
+  };
+  row.oncontextmenu = (e) => { e.preventDefault(); doClose(); }; // 桌面右键
+  row.onpointerdown = (e) => {
+    if (e.pointerType === "mouse") return; // 鼠标走右键，不用长按
+    sx = e.clientX; sy = e.clientY; clearPress();
+    pressTimer = setTimeout(doClose, 600);
+  };
+  row.onpointermove = (e) => { if (pressTimer && Math.hypot(e.clientX - sx, e.clientY - sy) > 10) clearPress(); };
+  row.onpointerup = clearPress;
+  row.onpointercancel = clearPress;
+  row.onpointerleave = clearPress;
+  row.onclick = () => { if (Date.now() < suppress) return; openTerminal(tv.terminalId); };
 }
 
 // —— 新建窗口 Sheet（§4.3）——
