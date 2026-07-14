@@ -882,7 +882,8 @@ try {
   body.interminal #termpage { display: block; }
   body.interminal main { padding-bottom: 0; }
   body.interminal #list, body.interminal #termlist { display: none !important; }
-  #termscreen { height: calc(100dvh - 53px - var(--termbar-h, 158px)); background: #0c0e11;
+  /* 终端画布铺满：header 之下直到底部；软键盘弹起时用 --termkbdgap 缩短到键盘上沿 */
+  #termscreen { height: calc(100dvh - 53px - var(--termkbdgap, 0px) - env(safe-area-inset-bottom)); background: #0c0e11;
                 padding: 4px 2px 0 6px; }
   #termscreen .xterm { height: 100%; }
   #termnotice { display: none; position: sticky; top: 53px; z-index: 10; font-size: 13px;
@@ -891,17 +892,20 @@ try {
   #termnotice .sp { flex: 1; }
   #termnotice button { border: 1px solid var(--border); background: var(--raised); color: var(--text);
                        border-radius: 8px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
-  /* 终端底部：极简 [输入框][发送]；模式切换与快捷键做成浮钮，悬在输入栏右上方 */
-  #termbar { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-             background: var(--bg); border-top: 1px solid var(--border);
-             padding: 6px 8px calc(8px + env(safe-area-inset-bottom)); }
-  body.interminal #termbar { display: block; }
-  /* 快捷键横栏：默认收起，点悬浮钮展开成底部一行 */
-  #termkeys { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 8px; scrollbar-width: none; }
+  /* 快捷键：一个悬浮钮固定在页面右侧约 20% 高处 + 一条从它横向拉出的抽屉（无底部输入栏，直连键盘） */
+  #termkeyswrap { display: none; position: fixed; left: 0; right: 0; bottom: 20%; z-index: 31; pointer-events: none; }
+  body.interminal #termkeyswrap { display: block; }
+  /* 抽屉：从悬浮钮处向左拉出的一条横栏；收起时缩回钮的位置 */
+  #termkeys { position: absolute; right: 60px; left: 8px; bottom: 0; pointer-events: auto;
+              display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+              padding: 6px; border: 1px solid var(--border); border-radius: 12px;
+              background: var(--raised); box-shadow: 0 4px 20px rgba(0,0,0,.45);
+              transform-origin: right center; transition: transform .18s ease, opacity .18s ease; }
   #termkeys::-webkit-scrollbar { display: none; }
-  body:not(.termkeysopen) #termkeys { display: none; }
+  body:not(.termkeysopen) #termkeys { opacity: 0; transform: translateX(28px) scaleX(.55); pointer-events: none; }
+  body.termkeysopen #termkeys { opacity: 1; transform: none; }
   #termkeys button { flex: none; min-width: 44px; min-height: 36px; border: 1px solid var(--border);
-                     background: var(--raised); color: var(--text); border-radius: 9px;
+                     background: var(--sunken); color: var(--text); border-radius: 9px;
                      padding: 5px 10px; font-size: 13px; cursor: pointer;
                      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   #termkeys button:active { background: var(--border); }
@@ -909,23 +913,11 @@ try {
   #termkeys button.latch { background: var(--accent-bg); color: var(--accent);
                            border-color: var(--accent); border-style: double; border-width: 3px; }
   #termkeys button.intr { color: var(--err); }
-  /* 快捷键悬浮钮：固定在页面右侧约 20% 高处——各 CLI 的输入行位置不定，用大致位置而非贴输入框 */
-  #termkeystoggle { display: none; position: fixed; right: 10px; bottom: 20%; z-index: 31;
-                    width: 42px; height: 36px; align-items: center; justify-content: center;
+  #termkeystoggle { position: absolute; right: 10px; bottom: 0; pointer-events: auto;
+                    width: 44px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
                     border: 1px solid var(--border); background: var(--raised); color: var(--dim);
-                    border-radius: 11px; cursor: pointer; opacity: .9;
-                    box-shadow: 0 2px 12px rgba(0,0,0,.35); }
-  body.interminal #termkeystoggle { display: inline-flex; }
+                    border-radius: 12px; cursor: pointer; opacity: .9; box-shadow: 0 2px 12px rgba(0,0,0,.4); }
   body.termkeysopen #termkeystoggle { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); opacity: 1; }
-  #termcomposer { display: flex; align-items: flex-end; gap: 8px; }
-  #terminput { flex: 1; min-width: 0; background: var(--raised); border: 1px solid var(--border);
-               border-radius: 12px; padding: 9px 12px; color: var(--text);
-               font-size: 17px; line-height: 1.45; resize: none; max-height: 120px; }
-  #terminput:focus { outline: none; border-color: var(--accent); }
-  #termsend { flex: none; width: 38px; height: 38px; border: none; border-radius: 50%;
-              background: var(--text); color: var(--bg); font-size: 17px; cursor: pointer; }
-  #termsend:disabled { opacity: .35; }
-  body.termkbd #terminput, body.termkbd #termsend { display: none; }
   /* 新建窗口 Sheet */
   .termsec { font-size: 12px; color: var(--dim); margin: 12px 2px 6px; }
   .termopt { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
@@ -1145,14 +1137,10 @@ try {
 <div id="termhome">
   <button id="newterm"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span data-i18n="term.new">新建窗口</span></button>
 </div>
-<div id="termbar">
+<div id="termkeyswrap">
   <div id="termkeys"></div>
-  <div id="termcomposer">
-    <textarea id="terminput" rows="1" data-i18n-ph="term.input_ph" placeholder="发送指令…"></textarea>
-    <button id="termsend" aria-label="发送" disabled>↑</button>
-  </div>
+  <button id="termkeystoggle" data-i18n-aria="term.keys_toggle" aria-label="快捷键"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12"/></svg></button>
 </div>
-<button id="termkeystoggle" data-i18n-aria="term.keys_toggle" aria-label="快捷键"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12"/></svg></button>
 <div id="termsheet" class="sheet">
   <div class="sheetbox">
     <div class="sheethead" data-i18n="term.new">新建窗口</div>
@@ -1634,7 +1622,7 @@ const I18N = {
     "term.locked": "此设备尚未获得终端授权。<br>请在电脑端的 CXX 设置中为本设备开启「终端」权限。",
     "term.empty": "还没有终端窗口。<br>点下方「新建窗口」，在电脑上开一个终端窗口，从手机操作。",
     "term.title_fallback": "终端",
-    "term.guide": "自然语言在下方发送；特殊按键在工具栏，「键盘」模式可直接敲字",
+    "term.guide": "点终端即可直接打字；Esc/Tab/Ctrl/方向键等特殊键在右侧悬浮钮里",
     "term.gone": "终端窗口不存在（可能已被清理）",
     "term.recovering": "正在恢复终端…",
     "term.not_owner": "当前设备不是控制者，请先接管",
@@ -2023,7 +2011,7 @@ const I18N = {
     "term.locked": "This device isn't authorized for terminals yet.<br>Enable the “Terminal” permission for it in CXX settings on your computer.",
     "term.empty": "No terminal windows yet.<br>Tap “New Window” below to open a terminal window on your computer and use it from your phone.",
     "term.title_fallback": "Terminal",
-    "term.guide": "Type natural language below; special keys are in the toolbar. “Keyboard” mode types directly.",
+    "term.guide": "Tap the terminal to type directly; special keys (Esc/Tab/Ctrl/arrows) are in the floating button on the right.",
     "term.gone": "Terminal window not found (it may have been cleaned up)",
     "term.recovering": "Restoring terminal…",
     "term.not_owner": "This device isn't the controller — take over first",
@@ -9288,8 +9276,6 @@ async function openTerminal(terminalId, opts = {}) {
   setTitle(tv?.title ?? t("term.title_fallback"));
   const presets = app.termPresets?.presets ?? [];
   const preset = presets.find((p) => p.id === tv?.presetId) ?? null;
-  // 只保留指令输入模式（键盘直连已移除）：打字发送 + 快捷键条覆盖特殊键
-  const mode = "ins";
   const fontSize = Math.max(10, Math.min(22, Number(localStorage.getItem("czr-termfont")) || 13));
   const xt = new window.Terminal({
     cols: tv?.cols || 80,
@@ -9319,7 +9305,6 @@ async function openTerminal(terminalId, opts = {}) {
     ownerName: "",
     status: tv?.status ?? "RUNNING",
     exitCode: null,
-    inputMode: mode,
     presetKeys: preset?.quickKeys ?? [],
     latch: { ctrl: false, alt: false },
     snapParts: [],
@@ -9331,14 +9316,14 @@ async function openTerminal(terminalId, opts = {}) {
   };
   $("termscreen").innerHTML = "";
   xt.open($("termscreen"));
-  // 键盘模式：xterm 捕获按键 → 原始字节直发；修饰键锁定在此变换
+  // 直连键盘：xterm 捕获按键 → 原始字节直发（含软键盘输入）；修饰键锁定在此变换
   xt.onData((d) => {
-    if (!app.term || app.term.inputMode !== "kbd") return;
+    if (!app.term) return;
     termSendRaw(applyLatch(d));
   });
+  // 点终端即聚焦，唤起软键盘直接打字（非 owner 由 termSendRaw 弹接管）
+  $("termscreen").onpointerup = () => { try { app.term?.xt.focus(); } catch {} };
   renderTermKeys();
-  setTermMode(mode, { silent: true });
-  updateTermbarHeight();
   fitTerm({ send: false });
   await attachTerminal();
   if (!localStorage.getItem("czr-termguide")) {
@@ -9529,41 +9514,6 @@ function termSendRaw(data) {
   });
 }
 
-async function sendTermInstruction() {
-  const st = app.term;
-  const text = $("terminput").value;
-  if (!st || !text.trim()) return;
-  if (!st.isOwner) { updateTermNotice(true); return; }
-  $("termsend").disabled = true;
-  try {
-    // 指令模式：text+submit 一次写入；bracketed paste 由 daemon 按 DECSET 2004 状态包裹
-    await app.session.request("terminal.input", { terminalId: st.id, text, submit: true });
-    $("terminput").value = ""; // ack 后才清（§4.5 草稿保护）
-    termInputGrow();
-    updateTermSendState();
-  } catch (err) {
-    showToast(err.code === 409 ? t("term.not_owner") : t("term.send_unknown", err.message));
-  } finally {
-    $("termsend").disabled = false;
-    updateTermSendState();
-  }
-}
-
-function setTermMode(mode, opts = {}) {
-  const st = app.term;
-  if (!st) return;
-  st.inputMode = mode;
-  const tv = termView(st.id);
-  localStorage.setItem(`czr-termmode-${tv?.presetId ?? "shell"}`, mode);
-  document.body.classList.toggle("termkbd", mode === "kbd");
-  st.latch.ctrl = st.latch.alt = false;
-  renderTermKeys();
-  updateTermbarHeight();
-  if (mode === "kbd") st.xt.focus();
-  else st.xt.blur();
-  if (!opts.silent) fitTerm({ send: st.isOwner });
-}
-
 function renderTermKeys() {
   const st = app.term;
   const box = $("termkeys");
@@ -9655,25 +9605,15 @@ function updateTermNotice(pulse = false) {
     } catch (err) { showToast(t("term.take_fail", err.message)); }
   };
   if (pulse && !st.isOwner) showToast(t("term.readonly_pulse"));
-  updateTermbarHeight();
 }
 
-// 快捷键条展开/收起：改 body 类 + 记忆；termbar 高度变了要重算并重排终端
+// 快捷键抽屉展开/收起：只改 body 类 + 记忆（抽屉是悬浮层，不影响终端画布高度）
 function setTermKeysOpen(open) {
   document.body.classList.toggle("termkeysopen", open);
   try { localStorage.setItem("czr-termkeysopen", open ? "1" : "0"); } catch {}
-  updateTermbarHeight();
-  if (app.view === "terminal" && app.term) fitTerm({ send: app.term.isOwner });
 }
 
 // —— 尺寸 ——
-function updateTermbarHeight() {
-  requestAnimationFrame(() => {
-    const h = $("termbar").offsetHeight || 158;
-    document.documentElement.style.setProperty("--termbar-h", `${h}px`);
-  });
-}
-
 function fitTerm({ send } = {}) {
   const st = app.term;
   if (!st) return;
@@ -9694,17 +9634,6 @@ function fitTerm({ send } = {}) {
   });
 }
 
-function updateTermSendState() {
-  $("termsend").disabled = !$("terminput").value.trim();
-}
-
-function termInputGrow() {
-  const el = $("terminput");
-  el.style.height = "auto";
-  el.style.height = `${Math.min(120, el.scrollHeight)}px`;
-  updateTermbarHeight();
-}
-
 // 离开终端页（视图部分；popstate/返回键统一走这里）
 function disposeTermPage() {
   const st = app.term;
@@ -9716,14 +9645,13 @@ function disposeTermPage() {
   app.term = null;
   $("termscreen").innerHTML = "";
   $("termnotice").className = "";
-  $("terminput").value = "";
-  document.body.classList.remove("termkbd");
+  document.documentElement.style.setProperty("--termkbdgap", "0px");
 }
 
 function closeTerminalPageView() {
   disposeTermPage();
   app.view = "list";
-  document.body.classList.remove("interminal");
+  document.body.classList.remove("interminal", "termkeysopen");
   $("back").style.display = "none";
   $("sharebtn").style.display = "";
   setTitle(t("brand"));
@@ -9865,19 +9793,21 @@ async function main() {
       $("composer").style.transform = shift;
       $("jump").style.transform = shift;
       $("homebar").style.transform = shift; // 首页搜索框也不能被键盘盖住
-      $("termbar").style.transform = shift; // 终端输入区同理
+      $("termkeyswrap").style.transform = shift; // 终端快捷键浮层顶到键盘上沿
     };
     const keyboardTargetFocused = () =>
       document.activeElement === $("input") || document.activeElement === $("search") ||
-      document.activeElement === $("terminput") ||
-      // 键盘模式：焦点在 xterm 隐藏 helper textarea 上，否则快捷键条被软键盘整个盖住
+      // 终端直连键盘：焦点在 xterm 隐藏 helper textarea 上
       (app.view === "terminal" && $("termscreen").contains(document.activeElement));
     const adjust = () => {
       const gap = keyboardTargetFocused() ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
       const shift = gap > 80 ? `translateY(-${Math.round(gap)}px)` : "";
       setKeyboardShift(shift);
-      // 终端画布高度用 100dvh（不认键盘），键盘弹起后光标行可能被盖：refit 让 xterm 缩行
-      if (app.view === "terminal" && app.term) fitTerm({ send: app.term.isOwner });
+      // 终端画布随键盘缩到上沿：--termkbdgap 缩短 #termscreen，再 refit 让 xterm 缩行
+      if (app.view === "terminal") {
+        document.documentElement.style.setProperty("--termkbdgap", gap > 80 ? `${Math.round(gap)}px` : "0px");
+        if (app.term) fitTerm({ send: app.term.isOwner });
+      }
     };
     const scheduleAdjust = () => {
       requestAnimationFrame(adjust);
@@ -10008,17 +9938,8 @@ async function main() {
   $("termpdel").onclick = async () => { if (presetDraftIndex >= 0 && await deleteTermPreset(presetDraftIndex)) closePresetEditor(); };
   $("termpresetsheet").onclick = (e) => { if (e.target === $("termpresetsheet")) closePresetEditor(); };
   $("termkeystoggle").onclick = () => setTermKeysOpen(!document.body.classList.contains("termkeysopen"));
-  $("termsend").onclick = sendTermInstruction;
-  $("terminput").addEventListener("input", () => { termInputGrow(); updateTermSendState(); });
-  $("terminput").addEventListener("keydown", (e) => {
-    // 桌面 Enter 发送、Shift+Enter 换行；手机键盘 Enter 保持换行（与主 composer 一致）
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && matchMedia("(pointer: fine)").matches) {
-      e.preventDefault();
-      sendTermInstruction();
-    }
-  });
   window.addEventListener("resize", () => {
-    if (app.view === "terminal") { updateTermbarHeight(); fitTerm({ send: true }); }
+    if (app.view === "terminal") fitTerm({ send: true });
   });
   $("sheet").onclick = (e) => { if (e.target === $("sheet")) $("sheet").classList.remove("open"); };
   $("dirsheet").onclick = (e) => { if (e.target === $("dirsheet")) $("dirsheet").classList.remove("open"); };
