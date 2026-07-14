@@ -460,6 +460,9 @@ try {
                       padding: 9px 13px; max-width: 85%; white-space: pre-wrap; word-break: break-word; }
   .msg.pending { opacity: .55; }
   .msg.assistant { word-break: break-word; }
+  .msg.sysnote { display: flex; justify-content: center; }
+  .msg.sysnote .notetext { font-size: 12px; color: var(--dim); background: var(--sunken);
+    border-radius: 10px; padding: 4px 12px; max-width: 90%; word-break: break-word; }
   .msg-actions { display: flex; align-items: center; gap: 8px; margin: 6px 0 0 0; color: var(--dim); }
   .msg-actions button { width: 28px; height: 28px; border: none; border-radius: 50%;
                         background: none; color: inherit; padding: 0; cursor: pointer;
@@ -1349,6 +1352,7 @@ const I18N = {
     "img.loadfail": "图片加载失败：{0}（点按重试）",
     "img.toolargeview": "图片过大，请在电脑端查看",
     "bubble.expandall": "展开全部（约 {0}k 字）",
+    "sysnote.tasknotify": "后台任务完成",
     "time.justnow": "刚刚",
     "time.minago": "{0} 分钟前",
     "time.hourago": "{0} 小时前",
@@ -1738,6 +1742,7 @@ const I18N = {
     "img.loadfail": "Image failed to load: {0} (tap to retry)",
     "img.toolargeview": "Image too large — view it on the computer",
     "bubble.expandall": "Show all (~{0}k chars)",
+    "sysnote.tasknotify": "Background task finished",
     "time.justnow": "just now",
     "time.minago": "{0} min ago",
     "time.hourago": (n) => `${n} hour${n == 1 ? "" : "s"} ago`,
@@ -7442,6 +7447,27 @@ function claudeToolVerb(name) {
   return t("act.work");
 }
 
+// Claude Code harness 会往流里注入 role=user 的机器消息（后台任务通知/系统提醒/斜杠命令包装），
+// 不是用户手打的话，原样渲染会变成一坨 XML 冒充用户发言。逐 text 块判断：
+//   task-notification → 抽 <summary> 缩成一行居中系统小字；
+//   command-name/args（斜杠命令包装）→ 还原成用户气泡 "/foo args"；
+//   system-reminder / local-command-stdout 等 → 纯噪音，吞掉。
+// 返回 undefined = 非注入块（照常渲染）；null = 吞掉；否则返回替代气泡。
+const CLAUDE_INJECTED_RE = /^<(task-notification|system-reminder|command-name|command-message|command-args|local-command-stdout|local-command-stderr)\b/;
+function claudeInjectedBubble(text) {
+  if (!CLAUDE_INJECTED_RE.test(text)) return undefined;
+  if (/^<task-notification\b/.test(text)) {
+    const summary = text.match(/<summary>([\s\S]*?)<\/summary>/)?.[1]?.trim();
+    return { cls: "sysnote", text: `⚙ ${summary || t("sysnote.tasknotify")}` };
+  }
+  const cmd = text.match(/<command-name>([\s\S]*?)<\/command-name>/)?.[1]?.trim();
+  if (cmd) {
+    const args = text.match(/<command-args>([\s\S]*?)<\/command-args>/)?.[1]?.trim();
+    return { cls: "user", text: args ? `${cmd} ${args}` : cmd };
+  }
+  return null;
+}
+
 // 一条 Claude 消息可含多块 → 返回气泡数组（渲染循环逐块 emit）。气泡 shape 与 itemToBubble 同形，
 // 故下游 bubbleNode/toolRow/attachToolOutput/imagesNode 全部复用；配对键 tool_use_id 塞进 callId 字段。
 // TodoWrite/TaskCreate/TaskUpdate 不走工具卡：由 trackClaudeActivity 抽成流末尾的计划/任务清单，这里连同回执一并吞掉。
@@ -7457,7 +7483,11 @@ function claudeItemToBubbles(item) {
       if (parsed.text) out.push({ cls: asRole, text: parsed.text, directives: parsed.directives });
     } else {
       const text = content.trim();
-      if (text) out.push({ cls: asRole, text });
+      if (text) {
+        const inj = claudeInjectedBubble(text);
+        if (inj !== undefined) { if (inj) out.push(inj); }
+        else out.push({ cls: asRole, text });
+      }
     }
     return out;
   }
@@ -7468,7 +7498,10 @@ function claudeItemToBubbles(item) {
     for (const b of content) {
       if (b?.type === "text") {
         const raw = String(b.text ?? "").trim();
-        if (raw) texts.push(raw);
+        if (!raw) continue;
+        const inj = claudeInjectedBubble(raw);
+        if (inj !== undefined) { if (inj) out.push(inj); continue; }
+        texts.push(raw);
       } else if (b?.type === "image" && b.imageRef) {
         refs.push(b.imageRef);
       }
@@ -7484,7 +7517,9 @@ function claudeItemToBubbles(item) {
         const parsed = parseCodexDirectives(raw);
         if (parsed.text) out.push({ cls: asRole, text: parsed.text, directives: parsed.directives });
       } else if (raw) {
-        out.push({ cls: asRole, text: raw });
+        const inj = claudeInjectedBubble(raw);
+        if (inj !== undefined) { if (inj) out.push(inj); }
+        else out.push({ cls: asRole, text: raw });
       }
     } else if (bt === "thinking" || bt === "redacted_thinking") {
       const text = String(b.thinking ?? b.text ?? "").trim();
@@ -7526,6 +7561,17 @@ function claudeItemToBubbles(item) {
     }
   }
   return out;
+}
+
+// harness 注入的通知（如后台任务完成）→ 居中一行灰色小字，不冒充用户气泡
+function sysnoteNode(text) {
+  const msg = document.createElement("div");
+  msg.className = "msg sysnote";
+  const b = document.createElement("div");
+  b.className = "notetext";
+  b.textContent = text;
+  msg.appendChild(b);
+  return msg;
 }
 
 // Claude thinking 明文可读 → 独立的淡色推理气泡（codex 的 reasoning 多为加密，故此路径 Claude 专属）
@@ -7688,10 +7734,16 @@ function trackClaudeActivity(item, live) {
   }
   // 本轮真实起点：一条不含 tool_result 的 user 消息即"用户发问"(turn 起点)；带 tool_result 的
   // user 消息是工具回执(轮中)，不算。锚定它的 timestamp 作耗时基准，桌面推断的运行态抖动不影响时长。
+  // harness 注入的机器消息（后台任务通知/系统提醒）也不算发问——它是同一件事的续跑，
+  // 不能撤掉进行中的计划清单。斜杠命令包装(<command-name>)是真发问，不在排除之列。
   if (m.role === "user") {
     const c = m.content;
     const isToolResult = Array.isArray(c) && c.some((b) => b?.type === "tool_result");
-    if (!isToolResult) {
+    const texts = typeof c === "string" ? [c]
+      : Array.isArray(c) ? c.filter((b) => b?.type === "text").map((b) => String(b.text ?? "")) : [];
+    const synthetic = texts.length > 0 &&
+      texts.every((s) => /^<(task-notification|system-reminder)\b/.test(s.trimStart()));
+    if (!isToolResult && !synthetic) {
       // 加载更早历史是向当前视图前插旧轮次，不能让旧用户消息撤掉当前轮的任务卡。
       if (!app.loadingEarlier) hidePreviousTurnTodos();
       const ts = Date.parse(item.timestamp ?? "");
@@ -7914,6 +7966,8 @@ function renderInto(items, live = false) {
       node = thinkNode(bubble.text); // Claude thinking 明文推理
       trackProcNode(node, "think", sourceItem);
       toProc = false;
+    } else if (bubble.cls === "sysnote") {
+      node = sysnoteNode(bubble.text); // harness 注入通知：一行系统小字
     } else if (bubble.cls === "tool") {
       node = toolRow(bubble);
       trackProcNode(node, "tool", sourceItem, true);
