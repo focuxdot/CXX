@@ -54,6 +54,15 @@ if (!existsSync(daemonBin)) {
   run(process.execPath, [join(root, "scripts", "build-sea.mjs")]);
 }
 
+// 1b. pty-host binary (Terminal Mode). Built per target arch; resolvePtyHostBin
+// finds it at ../Resources/bin/cxx-pty-host relative to the shell executable.
+const goArch = targetArch === "x64" ? "amd64" : targetArch;
+const ptyHostBin = join(distDir, "pty-host", `darwin-${goArch}`, "cxx-pty-host");
+if (!existsSync(ptyHostBin)) {
+  console.log(`→ pty-host binary missing (darwin-${goArch}), building ...`);
+  run(process.execPath, [join(root, "scripts", "build-pty-host.mjs"), "--only", `darwin-${goArch}`]);
+}
+
 // 2. fresh bundle skeleton
 rmSync(appDir, { recursive: true, force: true });
 mkdirSync(macosDir, { recursive: true });
@@ -87,6 +96,11 @@ chmodSync(shellBin, 0o755);
 // 4. embed the daemon
 copyFileSync(daemonBin, join(resourcesDir, "cxx-daemon"));
 chmodSync(join(resourcesDir, "cxx-daemon"), 0o755);
+// 4b. embed the pty-host (Resources/bin/cxx-pty-host)
+const binDir = join(resourcesDir, "bin");
+mkdirSync(binDir, { recursive: true });
+copyFileSync(ptyHostBin, join(binDir, "cxx-pty-host"));
+chmodSync(join(binDir, "cxx-pty-host"), 0o755);
 for (const file of [appIcon, menuBarIcon, logoSvg]) {
   if (!existsSync(file)) {
     console.error(`Missing icon asset: ${file}. Run \`node web/gen-icons.mjs\` first.`);
@@ -122,6 +136,7 @@ writeFileSync(join(contents, "Info.plist"), plist);
 // 6. sign nested-first, then the app deep
 console.log(`→ codesign (identity: ${identity}) ...`);
 run("codesign", ["--force", "--sign", identity, "--timestamp=none", join(resourcesDir, "cxx-daemon")]);
+run("codesign", ["--force", "--sign", identity, "--timestamp=none", join(binDir, "cxx-pty-host")]);
 run("codesign", ["--force", "--deep", "--sign", identity, "--timestamp=none", appDir]);
 run("codesign", ["--verify", "--deep", "--strict", "--verbose=2", appDir]);
 

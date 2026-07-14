@@ -963,7 +963,7 @@ try {
   <div class="mlabel m-session-label" data-i18n="menu.session">会话</div>
   <button data-act="archive-session" class="m-session"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/></svg><span data-i18n="menu.archive_session">归档当前会话</span></button>
   <button data-act="quick-commands" class="m-session"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v10H8l-4 4z"/><path d="M8 9h8"/><path d="M8 12h5"/></svg><span data-i18n="menu.quick_commands">快捷指令</span></button>
-  <button data-act="open-terminal" class="m-session" style="display:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span>在终端中打开此项目</span></button>
+  <button data-act="open-terminal" class="m-session" style="display:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span data-i18n="term.menu_open">在终端中打开此项目</span></button>
   <hr class="m-session-sep">
   <div class="mlabel" data-i18n="menu.appearance">外观</div>
   <div class="mseg" role="group" data-i18n-aria="menu.appearance" aria-label="外观">
@@ -1100,7 +1100,7 @@ try {
 <div id="toast"></div>
 <main>
   <div id="banner" class="banner"></div>
-  <div id="modeseg"><button id="modechat" class="on">会话</button><button id="modeterm">终端</button></div>
+  <div id="modeseg"><button id="modechat" class="on" data-i18n="term.mode_chat">会话</button><button id="modeterm" data-i18n="term.mode_term">终端</button></div>
   <div id="termlist"></div>
   <div id="termpage">
     <div id="termnotice"></div>
@@ -1116,25 +1116,25 @@ try {
 </main>
 <button id="jump" data-i18n-aria="a11y.jump" aria-label="回到底部">↓</button>
 <div id="termhome">
-  <button id="newterm"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span>新建终端</span></button>
+  <button id="newterm"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span data-i18n="term.new">新建终端</span></button>
 </div>
 <div id="termbar">
   <div id="termkeys"></div>
   <div id="termcomposer">
-    <div id="termmodeseg"><button id="tmodeins" class="on">指令</button><button id="tmodekbd">键盘</button></div>
-    <textarea id="terminput" rows="1" placeholder="发送指令…"></textarea>
+    <div id="termmodeseg"><button id="tmodeins" class="on" data-i18n="term.input_ins">指令</button><button id="tmodekbd" data-i18n="term.input_kbd">键盘</button></div>
+    <textarea id="terminput" rows="1" data-i18n-ph="term.input_ph" placeholder="发送指令…"></textarea>
     <button id="termsend" aria-label="发送" disabled>↑</button>
   </div>
 </div>
 <div id="termsheet" class="sheet">
   <div class="sheetbox">
-    <div class="sheethead">新建终端</div>
-    <div class="termsec">启动方式</div>
+    <div class="sheethead" data-i18n="term.new">新建终端</div>
+    <div class="termsec" data-i18n="term.launch">启动方式</div>
     <div id="termpresets"></div>
-    <div class="termsec">工作目录</div>
+    <div class="termsec" data-i18n="term.cwd">工作目录</div>
     <input id="termcwd" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="/path/to/project">
     <div id="termcwds" style="margin-top:6px"></div>
-    <button id="termstart">启动</button>
+    <button id="termstart" data-i18n="term.start">启动</button>
   </div>
 </div>
 <div id="homebar">
@@ -1550,6 +1550,45 @@ const I18N = {
     "diag.phone_direct_sub": "点对点直连电脑，不经中继",
     "diag.relay_backup": "中继（备用通道）",
     "diag.relay_backup_down": "已断开 · 不影响直连，将自动重连",
+    // —— Terminal Mode ——
+    "term.mode_chat": "会话",
+    "term.mode_term": "终端",
+    "term.new": "新建终端",
+    "term.launch": "启动方式",
+    "term.cwd": "工作目录",
+    "term.start": "启动",
+    "term.input_ins": "指令",
+    "term.input_kbd": "键盘",
+    "term.input_ph": "发送指令…",
+    "term.menu_open": "在终端中打开此项目",
+    "term.key_interrupt": "中断",
+    "term.load_fail": "终端组件加载失败",
+    "term.just_output": "刚刚有输出",
+    "term.silent_min": "{0} 分钟无输出",
+    "term.silent_hr": "{0} 小时无输出",
+    "term.st_creating": "正在启动",
+    "term.st_running": "运行中",
+    "term.st_stopping": "正在结束",
+    "term.st_exited": "已退出",
+    "term.st_failed": "启动失败",
+    "term.no_access": "此设备尚未获得终端授权",
+    "term.locked": "此设备尚未获得终端授权。<br>请在电脑端的 CXX 设置中为本设备开启「终端」权限。",
+    "term.empty": "还没有终端。<br>点下方「新建终端」，在电脑上启动一个 Shell 或 CLI Agent。",
+    "term.title_fallback": "终端",
+    "term.guide": "自然语言在下方发送；特殊按键在工具栏，「键盘」模式可直接敲字",
+    "term.gone": "终端不存在（可能已被清理）",
+    "term.recovering": "正在恢复终端…",
+    "term.not_owner": "当前设备不是控制者，请先接管",
+    "term.send_unknown": "发送结果未知：{0}",
+    "term.exit_code": "已退出 · exit {0}",
+    "term.rm": "关闭并移除",
+    "term.other_device": "另一台设备",
+    "term.controlled_by": "当前由「{0}」控制，本机只读",
+    "term.take": "接管",
+    "term.readonly_pulse": "当前为只读，点「接管」后可输入",
+    "term.take_fail": "接管失败：{0}",
+    "term.presets_fail": "无法获取启动方式：{0}",
+    "term.start_fail": "启动失败：{0}",
     // I18N-ZH
   },
   en: {
@@ -1883,6 +1922,45 @@ const I18N = {
     "diag.phone_direct_sub": "Peer-to-peer to your computer, bypassing the relay",
     "diag.relay_backup": "Relay (standby)",
     "diag.relay_backup_down": "Disconnected · direct link unaffected; reconnecting automatically",
+    // —— Terminal Mode ——
+    "term.mode_chat": "Sessions",
+    "term.mode_term": "Terminal",
+    "term.new": "New terminal",
+    "term.launch": "Launch with",
+    "term.cwd": "Working directory",
+    "term.start": "Start",
+    "term.input_ins": "Instruct",
+    "term.input_kbd": "Keyboard",
+    "term.input_ph": "Send an instruction…",
+    "term.menu_open": "Open this project in a terminal",
+    "term.key_interrupt": "Interrupt",
+    "term.load_fail": "Failed to load terminal component",
+    "term.just_output": "active just now",
+    "term.silent_min": "idle {0}m",
+    "term.silent_hr": "idle {0}h",
+    "term.st_creating": "Starting",
+    "term.st_running": "Running",
+    "term.st_stopping": "Stopping",
+    "term.st_exited": "Exited",
+    "term.st_failed": "Failed",
+    "term.no_access": "This device isn't authorized for terminals",
+    "term.locked": "This device isn't authorized for terminals yet.<br>Enable the “Terminal” permission for it in CXX settings on your computer.",
+    "term.empty": "No terminals yet.<br>Tap “New terminal” below to start a Shell or CLI agent on your computer.",
+    "term.title_fallback": "Terminal",
+    "term.guide": "Type natural language below; special keys are in the toolbar. “Keyboard” mode types directly.",
+    "term.gone": "Terminal not found (it may have been cleaned up)",
+    "term.recovering": "Restoring terminal…",
+    "term.not_owner": "This device isn't the controller — take over first",
+    "term.send_unknown": "Send result unknown: {0}",
+    "term.exit_code": "Exited · exit {0}",
+    "term.rm": "Close & remove",
+    "term.other_device": "another device",
+    "term.controlled_by": "Controlled by “{0}” — read-only here",
+    "term.take": "Take over",
+    "term.readonly_pulse": "Read-only — tap “Take over” to type",
+    "term.take_fail": "Take over failed: {0}",
+    "term.presets_fail": "Couldn't load launch options: {0}",
+    "term.start_fail": "Start failed: {0}",
     // I18N-EN
   },
 };
@@ -4374,6 +4452,9 @@ function applyLang(mode) {
   updateLangChecks();
   updateStatusPill(); // applyStaticI18n 重置了输入框占位为写死的 ChatGPT 串，按当前 agent 复位
   if (app.view === "list") renderList();
+  // 终端视图由 JS 渲染，applyStaticI18n 覆盖不到：切语言时一并重绘
+  if (app.homeTab === "term") renderTermList();
+  if (app.view === "terminal" && app.term) { renderTermKeys(); updateTermNotice(); }
 }
 
 function updateLangChecks() {
@@ -8764,7 +8845,7 @@ const TERM_KEYS = [
   { label: "↓", seq: "\x1b[B", arrow: "B" },
   { label: "↑", seq: "\x1b[A", arrow: "A" },
   { label: "→", seq: "\x1b[C", arrow: "C" },
-  { label: "中断", intr: true },
+  { label: "中断", i18n: "term.key_interrupt", intr: true },
 ];
 
 // xterm 静态资源懒加载：300KB 不进首屏；<script src> 本地 vendor（§14.1）
@@ -8782,7 +8863,7 @@ function loadXterm() {
       const s = document.createElement("script");
       s.src = src;
       s.onload = () => { if (--left === 0) resolve(); };
-      s.onerror = () => { xtermLoadPromise = null; reject(new Error("终端组件加载失败")); };
+      s.onerror = () => { xtermLoadPromise = null; reject(new Error(t("term.load_fail"))); };
       document.head.appendChild(s);
     }
   });
@@ -8824,7 +8905,7 @@ async function refreshTerminals() {
   } catch (err) {
     // 403 = 本设备未授权：显示权限锁定页而非通用错误（§4.1）
     if (err.code === 403) {
-      $("termlist").innerHTML = `<div class="termlocked">此设备尚未获得终端授权。<br>请在电脑端的 CXX 设置中为本设备开启「终端」权限。</div>`;
+      $("termlist").innerHTML = `<div class="termlocked">${t("term.locked")}</div>`;
     }
   }
 }
@@ -8832,20 +8913,21 @@ async function refreshTerminals() {
 function termAgo(ts) {
   if (!ts) return "";
   const m = Math.floor((Date.now() - ts) / 60000);
-  if (m < 1) return "刚刚有输出";
-  if (m < 60) return `${m} 分钟无输出`;
-  return `${Math.floor(m / 60)} 小时无输出`;
+  if (m < 1) return t("term.just_output");
+  if (m < 60) return t("term.silent_min", m);
+  return t("term.silent_hr", Math.floor(m / 60));
 }
 
+// status → [i18n key, css class]
 const TERM_STATE_LABEL = {
-  CREATING: ["正在启动", ""], RUNNING: ["运行中", "run"], DETACHED: ["运行中", "run"],
-  STOPPING: ["正在结束", ""], EXITED: ["已退出", ""], FAILED: ["启动失败", "err"],
+  CREATING: ["term.st_creating", ""], RUNNING: ["term.st_running", "run"], DETACHED: ["term.st_running", "run"],
+  STOPPING: ["term.st_stopping", ""], EXITED: ["term.st_exited", ""], FAILED: ["term.st_failed", "err"],
 };
 
 function renderTermList() {
   const box = $("termlist");
   if (!app.terminals.length) {
-    box.innerHTML = `<div class="termlocked">还没有终端。<br>点下方「新建终端」，在电脑上启动一个 Shell 或 CLI Agent。</div>`;
+    box.innerHTML = `<div class="termlocked">${t("term.empty")}</div>`;
     return;
   }
   box.innerHTML = "";
@@ -8853,7 +8935,8 @@ function renderTermList() {
   for (const tv of sorted) {
     const row = document.createElement("button");
     row.className = "termrow";
-    const [label, cls] = TERM_STATE_LABEL[tv.status] ?? [tv.status, ""];
+    const [labelKey, cls] = TERM_STATE_LABEL[tv.status] ?? [null, ""];
+    const label = labelKey ? t(labelKey) : tv.status;
     const running = tv.status === "RUNNING" || tv.status === "DETACHED";
     const sub = tv.status === "EXITED"
       ? `exit ${tv.exitCode ?? tv.exitSignal ?? "?"}`
@@ -8874,7 +8957,7 @@ async function openTermSheet(prefill = null) {
   try {
     app.termPresets = await app.session.request("terminal.presets");
   } catch (err) {
-    showToast(err.code === 403 ? "此设备尚未获得终端授权" : `无法获取启动方式：${err.message}`);
+    showToast(err.code === 403 ? t("term.no_access") : t("term.presets_fail", err.message));
     return;
   }
   const presets = app.termPresets?.presets ?? [];
@@ -8936,7 +9019,7 @@ async function startTerminal() {
     }
     openTerminal(view.terminalId, { replace: fromSession });
   } catch (err) {
-    showToast(`启动失败：${err.message}`);
+    showToast(t("term.start_fail", err.message));
   } finally {
     $("termstart").disabled = false;
   }
@@ -8974,7 +9057,7 @@ async function openTerminal(terminalId, opts = {}) {
   document.body.classList.add("interminal");
   $("back").style.display = "flex";
   $("sharebtn").style.display = "none";
-  setTitle(tv?.title ?? "终端");
+  setTitle(tv?.title ?? t("term.title_fallback"));
   const presets = app.termPresets?.presets ?? [];
   const preset = presets.find((p) => p.id === tv?.presetId) ?? null;
   // 模式记忆（per preset），首次按 preset 默认（Agent=指令、Shell=键盘）
@@ -9033,7 +9116,7 @@ async function openTerminal(terminalId, opts = {}) {
   await attachTerminal();
   if (!localStorage.getItem("czr-termguide")) {
     localStorage.setItem("czr-termguide", "1");
-    showToast("自然语言在下方发送；特殊按键在工具栏，「键盘」模式可直接敲字");
+    showToast(t("term.guide"));
   }
 }
 
@@ -9072,12 +9155,12 @@ async function attachTerminal() {
     updateTermNotice();
   } catch (err) {
     if (err.code === 404) {
-      showToast("终端不存在（可能已被清理）");
+      showToast(t("term.gone"));
       if (app.view === "terminal") history.back(); // 经 popstate 统一收尾，不留孤儿历史项
       else closeTerminalPageView();
       return;
     }
-    if (err.code === 403) showToast("此设备尚未获得终端授权");
+    if (err.code === 403) showToast(t("term.no_access"));
     // 瞬时失败：不能干等（resync 只由输出帧触发，而未 attach 就收不到帧 → 死锁在
     // "正在恢复终端…"）。标记待重连，由下方 finally 退避重试。
     if (app.term === st) st.needReattach = true;
@@ -9232,7 +9315,7 @@ async function sendTermInstruction() {
     termInputGrow();
     updateTermSendState();
   } catch (err) {
-    showToast(err.code === 409 ? "当前设备不是控制者，请先接管" : `发送结果未知：${err.message}`);
+    showToast(err.code === 409 ? t("term.not_owner") : t("term.send_unknown", err.message));
   } finally {
     $("termsend").disabled = false;
     updateTermSendState();
@@ -9265,7 +9348,7 @@ function renderTermKeys() {
   for (const qk of st.presetKeys) keys.splice(3, 0, { label: qk.label, seq: qk.seq }); // preset 键放前排（↵ 之后）
   for (const k of keys) {
     const b = document.createElement("button");
-    b.textContent = k.label;
+    b.textContent = k.i18n ? t(k.i18n) : k.label;
     if (k.intr) b.className = "intr";
     if (k.latch) b.classList.toggle("latch", st.latch[k.latch]);
     // pointerdown 而非 click：避免键盘模式下点按钮把 xterm 焦点抢走、软键盘塌掉
@@ -9318,15 +9401,15 @@ function updateTermNotice(pulse = false) {
   const sp = () => { const s = document.createElement("span"); s.className = "sp"; return s; };
   let shown = false;
   if (st.status === "EXITED" || st.status === "FAILED") {
-    const how = st.status === "FAILED" ? "启动失败" : `已退出 · exit ${st.exitCode ?? "?"}`;
-    n.append(mkSpan(how), sp(), mkBtn("termrm", "关闭并移除"));
+    const how = st.status === "FAILED" ? t("term.st_failed") : t("term.exit_code", st.exitCode ?? "?");
+    n.append(mkSpan(how), sp(), mkBtn("termrm", t("term.rm")));
     shown = true;
   } else if (st.reconnecting) {
-    n.append(mkSpan("正在恢复终端…"));
+    n.append(mkSpan(t("term.recovering")));
     shown = true;
   } else if (!st.isOwner) {
-    const who = st.ownerName || "另一台设备";
-    n.append(mkSpan(`当前由「${who}」控制，本机只读`), sp(), mkBtn("termtake", "接管"));
+    const who = st.ownerName || t("term.other_device");
+    n.append(mkSpan(t("term.controlled_by", who)), sp(), mkBtn("termtake", t("term.take")));
     shown = true;
   }
   n.className = shown ? "show" : "";
@@ -9344,9 +9427,9 @@ function updateTermNotice(pulse = false) {
       st.isOwner = true;
       fitTerm({ send: true });
       updateTermNotice();
-    } catch (err) { showToast(`接管失败：${err.message}`); }
+    } catch (err) { showToast(t("term.take_fail", err.message)); }
   };
-  if (pulse && !st.isOwner) showToast("当前为只读，点「接管」后可输入");
+  if (pulse && !st.isOwner) showToast(t("term.readonly_pulse"));
   updateTermbarHeight();
 }
 
