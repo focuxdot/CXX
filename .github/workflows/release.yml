@@ -38,6 +38,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: pty-host/go.mod
       - name: Build macOS app and DMG
         run: npm run build:app -- --dmg
       - name: Prepare release assets
