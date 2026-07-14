@@ -3465,8 +3465,13 @@ function attachToolOutput({ callId, text, code }) {
     ref.tout.style.display = "block";
   }
   if (code !== null && code !== undefined) {
-    ref.stat.textContent = code === 0 ? "✓" : `✗ ${code}`;
-    ref.stat.classList.add(code === 0 ? "ok" : "err");
+    // 成功是常态，不占位；只在失败时留下 ✗ 提示
+    if (code === 0) {
+      ref.stat.textContent = "";
+    } else {
+      ref.stat.textContent = `✗ ${code}`;
+      ref.stat.classList.add("err");
+    }
   }
   return null; // 已并入，无新节点
 }
@@ -3609,8 +3614,13 @@ function diffNode({ files, ok, callId }) {
   // ChatGPT/codex（patch_apply_end）创建即知成败；Claude 传 ok:null + callId，成败由 tool_result
   // 回执经 attachToolOutput 并入（同一配对通道），故保留 tout 只撤掉调用参数文本行
   if (ok !== null && ok !== undefined) {
-    stat.textContent = ok ? "✓" : "✗";
-    stat.classList.add(ok ? "ok" : "err");
+    // 成功是常态，不占位；只在失败时留下 ✗ 提示
+    if (ok) {
+      stat.textContent = "";
+    } else {
+      stat.textContent = "✗";
+      stat.classList.add("err");
+    }
   }
   const body = wrap.querySelector(".tool-body");
   const tout = wrap.querySelector(".tout");
@@ -10022,7 +10032,21 @@ async function main() {
       accum += t.clientY - tY; // 手指下移为正
       tY = t.clientY; tX = t.clientX;
       const lines = Math.trunc(accum / rowH);
-      if (lines !== 0) { xt.scrollLines(-lines); accum -= lines * rowH; } // 下移→看更早（上滚）
+      if (lines !== 0) {
+        accum -= lines * rowH;
+        if (xt.buffer.active.type === "alternate") {
+          // 全屏 TUI（备用屏，无回滚）：拖动转方向键，跟桌面滚轮一致（xterm 桌面也是 wheel→方向键）。
+          // 需 owner；否则只读设备发不出，静默忽略（不弹接管，避免滑动狂弹）。
+          if (app.term.isOwner) {
+            const n = Math.min(Math.abs(lines), 6); // 单次限幅，猛滑不狂发
+            const arrow = lines > 0 ? "A" : "B"; // 手指下移→上箭头（看更早）
+            const seq = (xt.modes?.applicationCursorKeysMode ? "\x1bO" : "\x1b[") + arrow;
+            termSendRaw(seq.repeat(n));
+          }
+        } else {
+          xt.scrollLines(-lines); // 普通屏：本地滚回滚区（下移→上滚）
+        }
+      }
     }, { passive: true });
     scr.addEventListener("touchend", () => {
       if (!moved && app.term) { try { app.term.xt.focus(); } catch {} } // 轻点聚焦
