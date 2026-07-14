@@ -181,6 +181,12 @@ try {
   body.viewer #topmenu .m-session,
   body.viewer #topmenu .m-session-label,
   body.viewer #topmenu .m-session-sep { display: none !important; }
+  /* 终端会话专属：悬浮钮显隐开关，仅在终端页出现；同时隐掉与首页列表相关的项 */
+  #topmenu .m-term, #topmenu .m-term-label, #topmenu .m-term-sep { display: none; }
+  body.interminal #topmenu .m-term { display: flex; }
+  body.interminal #topmenu .m-term-label { display: block; }
+  body.interminal #topmenu .m-term-sep { display: block; }
+  body.interminal #topmenu .m-list { display: none; }
   #topmenu .mlabel { font-size: 12px; color: var(--dim); padding: 8px 14px 2px; }
   #topmenu button { display: flex; align-items: center; gap: 12px; width: 100%; border: none;
                     background: none; color: var(--text); font-size: 15px; padding: 12px 14px;
@@ -943,6 +949,33 @@ try {
                              box-shadow: 0 6px 22px rgba(0,0,0,.55); }
   /* 松手回弹：只在吸附瞬间给 left/top 加过渡，拖动时不加免得跟手拖尾 */
   #termkeystoggle.snapping { transition: left .22s cubic-bezier(.22,1,.36,1), top .22s ease, transform .12s ease; }
+  /* 悬浮输入框：点输入钮展开一条整行输入栏。它挂在 #termkeyswrap 里，键盘弹起时
+     整个 wrap 被 translateY(-gap) 顶到键盘上沿，故 bar 锚在 bottom 即自动贴键盘正上方。 */
+  #terminputbar { display: none; position: absolute; left: 8px; right: 8px; bottom: 6px; pointer-events: auto;
+                  align-items: center; gap: 8px; padding: 6px;
+                  border: 1px solid var(--border); border-radius: 12px; background: var(--raised);
+                  box-shadow: 0 6px 22px rgba(0,0,0,.5); }
+  body.terminputopen #terminputbar { display: flex; }
+  #terminputfield { flex: 1; min-width: 0; border: 1px solid var(--border); background: var(--sunken);
+                    color: var(--text); border-radius: 9px; padding: 10px 12px;
+                    font-size: 16px; /* ≥16px 防 iOS 聚焦时页面缩放 */ font-family: inherit; line-height: 1.2; outline: none; }
+  #terminputfield:focus { border-color: var(--accent); }
+  #terminputsend { flex: none; width: 46px; height: 42px; display: inline-flex; align-items: center; justify-content: center;
+                   border: none; background: var(--accent); color: var(--accent-fg, #fff); border-radius: 9px; cursor: pointer; }
+  #terminputsend:active { opacity: .8; }
+  /* 输入切换钮：与快捷键钮同款；默认在快捷键钮上方 52px；可长按拖动、左右吸附 */
+  #terminputtoggle { position: absolute; right: 10px; bottom: calc(20% + 52px); pointer-events: auto; touch-action: none;
+                     width: 44px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
+                     border: 1px solid var(--border); background: var(--raised); color: var(--dim);
+                     border-radius: 12px; cursor: pointer; opacity: .9; box-shadow: 0 2px 12px rgba(0,0,0,.4);
+                     transition: transform .12s ease, box-shadow .12s ease; }
+  body.terminputopen #terminputtoggle { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); opacity: 1; }
+  #terminputtoggle.dragging { transform: scale(1.15); opacity: 1; cursor: grabbing;
+                              border-color: var(--accent); color: var(--accent); box-shadow: 0 6px 22px rgba(0,0,0,.55); }
+  #terminputtoggle.snapping { transition: left .22s cubic-bezier(.22,1,.36,1), top .22s ease, transform .12s ease; }
+  /* 菜单里可整只隐藏这两个悬浮钮（连同展开的抽屉/输入栏） */
+  body.hidetermkeys #termkeystoggle, body.hidetermkeys #termkeys { display: none !important; }
+  body.hideterminput #terminputtoggle, body.hideterminput #terminputbar { display: none !important; }
   /* 新建窗口 Sheet */
   .termsec { font-size: 12px; color: var(--dim); margin: 12px 2px 6px; }
   .termopt { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
@@ -1001,6 +1034,10 @@ try {
   </div>
 </header>
 <div id="topmenu">
+  <div class="mlabel m-term-label" data-i18n="menu.term_overlays">悬浮按钮</div>
+  <button data-act="toggle-termkeys" class="m-term"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12"/></svg><span data-i18n="menu.term_keys">快捷键钮</span><span class="mck" id="cktermkeys"></span></button>
+  <button data-act="toggle-terminput" class="m-term"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 8 8 12 4 16"/><line x1="11" y1="16" x2="19" y2="16"/></svg><span data-i18n="menu.term_input">输入框钮</span><span class="mck" id="ckterminput"></span></button>
+  <hr class="m-term-sep">
   <div class="mlabel m-full m-list" data-i18n="menu.organize">组织方式</div>
   <button data-act="proj" class="m-full m-list"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span data-i18n="organize.proj">按项目</span><span class="mck" id="ckproj"></span></button>
   <button data-act="time" class="m-full m-list"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span data-i18n="organize.time">时间线</span><span class="mck" id="cktime"></span></button>
@@ -1165,6 +1202,11 @@ try {
 <div id="termkeyswrap">
   <div id="termkeys" class="side-right"></div>
   <button id="termkeystoggle" data-i18n-aria="term.keys_toggle" aria-label="快捷键"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12"/></svg></button>
+  <div id="terminputbar">
+    <input id="terminputfield" type="text" enterkeyhint="send" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-i18n-ph="term.input_ph" placeholder="输入命令…" />
+    <button id="terminputsend" data-i18n-aria="term.input_send" aria-label="发送"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></svg></button>
+  </div>
+  <button id="terminputtoggle" data-i18n-aria="term.input_toggle" aria-label="输入框"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 8 8 12 4 16"/><line x1="11" y1="16" x2="19" y2="16"/></svg></button>
 </div>
 <div id="termsheet" class="sheet">
   <div class="sheetbox">
@@ -1630,6 +1672,12 @@ const I18N = {
     "term.input_ins": "指令",
     "term.input_kbd": "键盘",
     "term.keys_toggle": "快捷键",
+    "term.input_toggle": "输入框",
+    "term.input_send": "发送",
+    "term.input_ph": "输入命令…",
+    "menu.term_overlays": "悬浮按钮",
+    "menu.term_keys": "快捷键钮",
+    "menu.term_input": "输入框钮",
     "term.input_ph": "发送指令…",
     "term.menu_open": "在终端中打开此项目",
     "term.key_interrupt": "中断",
@@ -2023,6 +2071,12 @@ const I18N = {
     "term.input_ins": "Instruct",
     "term.input_kbd": "Keyboard",
     "term.keys_toggle": "Shortcut keys",
+    "term.input_toggle": "Text input",
+    "term.input_send": "Send",
+    "term.input_ph": "Type a command…",
+    "menu.term_overlays": "Floating buttons",
+    "menu.term_keys": "Shortcut-keys button",
+    "menu.term_input": "Text-input button",
     "term.input_ph": "Send an instruction…",
     "term.menu_open": "Open this project in a terminal",
     "term.key_interrupt": "Interrupt",
@@ -9432,7 +9486,8 @@ async function openTerminal(terminalId, opts = {}) {
   document.body.classList.add("interminal");
   // 快捷键条默认收起；记住上次选择（默认 collapsed）
   document.body.classList.toggle("termkeysopen", localStorage.getItem("czr-termkeysopen") === "1");
-  requestAnimationFrame(layoutTermKeys); // 恢复上次拖动的悬浮钮位置 + 摆好抽屉锚点
+  document.body.classList.remove("terminputopen"); // 输入框每次进终端默认收起
+  requestAnimationFrame(() => { layoutTermKeys(); layoutTermInput(); }); // 恢复两枚悬浮钮位置 + 抽屉锚点
   $("back").style.display = "flex";
   $("sharebtn").style.display = "none";
   setTitle(tv?.title ?? t("term.title_fallback"));
@@ -9865,6 +9920,107 @@ function setupTermKeyDrag() {
   addEventListener("orientationchange", () => { if (document.body.classList.contains("interminal")) layoutTermKeys(); });
 }
 
+// —— 悬浮输入框：先在文本框里拼好整行再一次性发送（手机上比逐字敲进 PTY 好用）——
+// 展开时 field.focus() 唤起软键盘，visualViewport 那套逻辑（keyboardTargetFocused 已含本框）
+// 会把整个 #termkeyswrap 顶到键盘上沿，故 bar 自动落在键盘正上方。
+function setTermInputOpen(open) {
+  document.body.classList.toggle("terminputopen", open);
+  const f = $("terminputfield");
+  if (open) { layoutTermInput(); f.focus(); }
+  else { f.blur(); }
+}
+
+function sendTermInput() {
+  const f = $("terminputfield");
+  const v = f.value;
+  if (!v) { f.focus(); return; }
+  termSendRaw(v + "\r"); // 整行 + 回车：对 shell 命令、Claude 提示词都通用
+  f.value = "";
+  f.focus(); // 保持展开、可继续输入下一条
+}
+
+// —— 悬浮输入钮：位置可长按拖动、左右吸附、按浏览器记忆 ——
+const TERMINPUTPOS_KEY = "czr-terminputpos"; // {side:'l'|'r', fy}
+let termInputPos = null;
+try { termInputPos = JSON.parse(localStorage.getItem(TERMINPUTPOS_KEY) || "null"); } catch {}
+
+function layoutTermInput() {
+  const btn = $("terminputtoggle");
+  if (!btn) return;
+  const W = window.innerWidth, H = window.innerHeight;
+  const th = btn.offsetHeight || 40;
+  if (termInputPos) {
+    const top = clampn(termInputPos.fy * H - th / 2, 8, H - th - 8);
+    btn.style.top = top + "px"; btn.style.bottom = "auto";
+    if (termInputPos.side === "l") { btn.style.left = "10px"; btn.style.right = "auto"; }
+    else { btn.style.right = "10px"; btn.style.left = "auto"; }
+  } else {
+    btn.style.left = btn.style.top = btn.style.right = btn.style.bottom = ""; // 回落 CSS 默认（右侧、快捷键钮上方）
+  }
+}
+
+function setupTermInputDrag() {
+  const btn = $("terminputtoggle");
+  if (!btn || btn.dataset.dragBound) return;
+  btn.dataset.dragBound = "1";
+  let holdTimer = null, dragging = false, moved = false, pid = null, sx = 0, sy = 0;
+  const snapTo = (side, top) => {
+    if (side === "l") { btn.style.left = "10px"; btn.style.right = "auto"; }
+    else { btn.style.right = "10px"; btn.style.left = "auto"; }
+    btn.style.top = top + "px"; btn.style.bottom = "auto";
+  };
+  const end = () => {
+    if (pid === null) return;
+    clearTimeout(holdTimer);
+    if (dragging) {
+      // 松手：竖直保留，水平吸附到更近的一侧（左/右）并记忆
+      const W = window.innerWidth, H = window.innerHeight;
+      const tw = btn.offsetWidth || 44, th = btn.offsetHeight || 40;
+      const r = btn.getBoundingClientRect();
+      const side = (r.left + tw / 2) < W / 2 ? "l" : "r";
+      const top = clampn(r.top, 8, H - th - 8);
+      termInputPos = { side, fy: (top + th / 2) / H };
+      try { localStorage.setItem(TERMINPUTPOS_KEY, JSON.stringify(termInputPos)); } catch {}
+      btn.classList.remove("dragging");
+      btn.classList.add("snapping");
+      snapTo(side, top);
+      setTimeout(() => btn.classList.remove("snapping"), 240);
+    } else if (!moved) {
+      setTermInputOpen(!document.body.classList.contains("terminputopen")); // 轻点=开/关输入框
+    }
+    dragging = false; moved = false; pid = null;
+  };
+  btn.addEventListener("pointerdown", (e) => {
+    pid = e.pointerId; sx = e.clientX; sy = e.clientY; moved = false; dragging = false;
+    holdTimer = setTimeout(() => {
+      dragging = true; btn.classList.add("dragging");
+      try { btn.setPointerCapture(pid); } catch {}
+      try { navigator.vibrate?.(15); } catch {}
+    }, 350);
+  });
+  btn.addEventListener("pointermove", (e) => {
+    if (e.pointerId !== pid) return;
+    if (!dragging) { if (Math.hypot(e.clientX - sx, e.clientY - sy) > 10) { moved = true; clearTimeout(holdTimer); } return; }
+    e.preventDefault();
+    const W = window.innerWidth, H = window.innerHeight;
+    const tw = btn.offsetWidth || 44, th = btn.offsetHeight || 40;
+    btn.style.left = clampn(e.clientX - tw / 2, 8, W - tw - 8) + "px";
+    btn.style.top = clampn(e.clientY - th / 2, 8, H - th - 8) + "px";
+    btn.style.right = "auto"; btn.style.bottom = "auto";
+  });
+  btn.addEventListener("pointerup", end);
+  btn.addEventListener("pointercancel", end);
+  addEventListener("resize", () => { if (document.body.classList.contains("interminal")) layoutTermInput(); });
+  addEventListener("orientationchange", () => { if (document.body.classList.contains("interminal")) layoutTermInput(); });
+}
+
+// 菜单里两个悬浮钮显隐开关的勾选态（✓ = 显示）
+function updateTermOverlayChecks() {
+  const k = $("cktermkeys"), i = $("ckterminput");
+  if (k) k.textContent = document.body.classList.contains("hidetermkeys") ? "" : "✓";
+  if (i) i.textContent = document.body.classList.contains("hideterminput") ? "" : "✓";
+}
+
 // —— 尺寸 ——
 function fitTerm({ send } = {}) {
   const st = app.term;
@@ -10049,6 +10205,7 @@ async function main() {
     };
     const keyboardTargetFocused = () =>
       document.activeElement === $("input") || document.activeElement === $("search") ||
+      document.activeElement === $("terminputfield") || // 悬浮输入框聚焦：也要把浮层顶到键盘上沿
       // 终端直连键盘：焦点在 xterm 隐藏 helper textarea 上
       (app.view === "terminal" && $("termscreen").contains(document.activeElement));
     const adjust = () => {
@@ -10141,6 +10298,7 @@ async function main() {
     updateThemeChecks();
     updateFontChecks();
     updateLangChecks();
+    updateTermOverlayChecks();
     updateMenuState();
     $("agentpick").classList.remove("open");
     $("topmenu").classList.toggle("open");
@@ -10148,6 +10306,17 @@ async function main() {
   $("topmenu").onclick = (e) => {
     const act = e.target.closest("button")?.dataset.act;
     if (!act) return;
+    if (act === "toggle-termkeys" || act === "toggle-terminput") {
+      // 悬浮钮显隐开关：切 body 类、落盘、更新勾选；关掉的顺手收起其展开态。菜单保持打开。
+      const which = act === "toggle-termkeys"
+        ? { cls: "hidetermkeys", key: "czr-show-termkeys", collapse: () => setTermKeysOpen(false) }
+        : { cls: "hideterminput", key: "czr-show-terminput", collapse: () => setTermInputOpen(false) };
+      const hidden = document.body.classList.toggle(which.cls);
+      localStorage.setItem(which.key, hidden ? "0" : "1");
+      if (hidden) which.collapse();
+      updateTermOverlayChecks();
+      return;
+    }
     if (act === "proj" || act === "time") {
       app.organize = act;
       localStorage.setItem("czr-organize", act);
@@ -10190,6 +10359,13 @@ async function main() {
   $("termpdel").onclick = async () => { if (presetDraftIndex >= 0 && await deleteTermPreset(presetDraftIndex)) closePresetEditor(); };
   $("termpresetsheet").onclick = (e) => { if (e.target === $("termpresetsheet")) closePresetEditor(); };
   setupTermKeyDrag();
+  setupTermInputDrag();
+  // 用 pointerdown + preventDefault：点发送不夺走输入框焦点（否则键盘会闪一下）
+  $("terminputsend").addEventListener("pointerdown", (e) => { e.preventDefault(); sendTermInput(); });
+  $("terminputfield").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sendTermInput(); } });
+  // 恢复"隐藏悬浮钮"的记忆（默认都显示）
+  if (localStorage.getItem("czr-show-termkeys") === "0") document.body.classList.add("hidetermkeys");
+  if (localStorage.getItem("czr-show-terminput") === "0") document.body.classList.add("hideterminput");
   // 终端触摸：手指拖动 → 用 xterm 官方 scrollLines() 滚回滚区（screen 覆盖 viewport，原生触摸滚不到；
   // 直接改 viewport.scrollTop xterm 不认，故走 API）。按像素累计换算成行；几乎没移动的轻点 → 聚焦唤起软键盘。
   // 注意：grok/vim 等全屏 TUI 用备用屏缓冲，本身没有回滚，滚动无效属正常（用其自身方向键翻页）。
