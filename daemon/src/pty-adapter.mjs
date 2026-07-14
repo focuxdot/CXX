@@ -271,16 +271,22 @@ export function removePtyHostDir(dir) {
 export function resolvePtyHostBin(configured) {
   const exe = process.platform === "win32" ? "cxx-pty-host.exe" : "cxx-pty-host";
   const execDir = dirname(process.execPath);
-  const repo = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
   const goos = process.platform === "win32" ? "windows" : process.platform;
   const goarch = process.arch === "x64" ? "amd64" : process.arch;
   const candidates = [
     configured, // config.ptyHostPath 显式覆盖优先
     join(execDir, exe), // 与 daemon 二进制同目录（Windows/Linux 安装布局）
     join(execDir, "..", "Resources", "bin", exe), // macOS .app 布局
-    join(repo, "dist", "pty-host", `${goos}-${goarch}`, exe), // 源码运行：交叉编译产物
-    join(repo, "dist", "pty-host", "dev", exe), // 源码运行：smoke 的本机 dev 构建
   ];
+  // 源码运行时（非 SEA）追加 dist 候选。SEA 里 import.meta.url 为 undefined，
+  // fileURLToPath 会崩——安装产物只走上面 execDir 候选，无需仓库路径。
+  if (import.meta.url) {
+    const repo = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+    candidates.push(
+      join(repo, "dist", "pty-host", `${goos}-${goarch}`, exe), // 交叉编译产物
+      join(repo, "dist", "pty-host", "dev", exe), // smoke 的本机 dev 构建
+    );
+  }
   for (const p of candidates) {
     if (p && existsSync(p)) return p;
   }

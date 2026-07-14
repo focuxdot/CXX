@@ -43,6 +43,8 @@ jobs:
           mkdir -p site/icons
           cp web/index.html web/manifest.webmanifest web/sw.js site/
           cp web/icons/*.png site/icons/
+          # Terminal Mode 的 xterm 静态资源（sw.js 预缓存 + 终端页 <script src> 依赖它）
+          cp -r web/vendor site/vendor
 
       - name: Upload site
         uses: actions/upload-pages-artifact@v4

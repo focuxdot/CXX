@@ -9,7 +9,6 @@
 // 这里只认 deviceId/deviceName。
 import { existsSync, statSync } from "node:fs";
 import { join, basename, delimiter } from "node:path";
-import { createRequire } from "node:module";
 import process from "node:process";
 
 import { randomId } from "./crypto.mjs";
@@ -20,8 +19,9 @@ import {
   removePtyHostDir,
 } from "./pty-adapter.mjs";
 import { captureShellEnv } from "./shell-env.mjs";
-
-const require = createRequire(import.meta.url);
+// 静态导入 vendor CJS（与 rtc-link 的 werift 同款）：createRequire(import.meta.url)
+// 在 SEA 里 import.meta.url 非法路径会崩；esbuild 直接把它内联进 bundle。
+import xtermHeadless from "./vendor/xterm-headless.cjs";
 
 // —— 常量（起点值，§17 基准后校准）——
 const MAX_TERMINALS = 8; // 同时运行上限（host 进程数）
@@ -158,7 +158,7 @@ export class TerminalManager {
 
   #loadXterm() {
     if (!this.#xterm) {
-      const { Terminal, SerializeAddon } = require("./vendor/xterm-headless.cjs");
+      const { Terminal, SerializeAddon } = xtermHeadless;
       this.#xterm = { Terminal, SerializeAddon };
     }
     return this.#xterm;
