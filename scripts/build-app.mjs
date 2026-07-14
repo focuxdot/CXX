@@ -68,6 +68,7 @@ run("swiftc", [
   join(shellSrc, "PairingWindow.swift"),
   join(shellSrc, "DevicesWindow.swift"),
   join(shellSrc, "NotifyWindow.swift"),
+  join(shellSrc, "TerminalWindow.swift"),
   join(shellSrc, "AppDelegate.swift"),
   join(shellSrc, "main.swift"),
   "-o",

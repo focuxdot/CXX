@@ -844,6 +844,102 @@ try {
                      color: var(--text); border-radius: 10px; padding: 12px; font-size: 14px; cursor: pointer; }
   .sharegen button:active { background: var(--border); }
   #shareqr { display: block; margin: 12px auto 4px; background: #fff; padding: 10px; border-radius: 10px; }
+
+  /* —— Terminal Mode（internal/TERMINAL-MODE.md §4/§14）—— */
+  /* 首页「会话 / 终端」二段切换：仅 daemon 声明 terminal 能力时显示 */
+  #modeseg { display: none; gap: 0; max-width: 300px; margin: 10px auto 2px;
+             background: var(--sunken); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
+  body.hasterm:not(.insession):not(.interminal) #modeseg { display: flex; }
+  #modeseg button { flex: 1; border: none; background: none; color: var(--dim); font: inherit;
+                    font-size: 14px; padding: 6px 0; border-radius: 8px; cursor: pointer; }
+  #modeseg button.on { background: var(--raised); color: var(--text); font-weight: 600;
+                       box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+  /* 终端列表（termtab 时替换会话列表） */
+  #termlist { display: none; max-width: 760px; margin: 0 auto; padding: 8px 12px 96px; }
+  body.hasterm.termtab:not(.insession):not(.interminal) #termlist { display: block; }
+  body.termtab #list { display: none; }
+  body.termtab #homebar { display: none !important; }
+  body.termtab #agentpick { visibility: hidden; }
+  .termrow { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+             background: var(--raised); border: 1px solid var(--border); border-radius: 12px;
+             padding: 12px 14px; margin-bottom: 8px; cursor: pointer; color: var(--text); font: inherit; }
+  .termrow:active { background: var(--border); }
+  .termrow .tmain { flex: 1; min-width: 0; }
+  .termrow .tname { font-size: 15px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .termrow .tsub { font-size: 12px; color: var(--dim); margin-top: 2px;
+                   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .termrow .tstate { flex: none; font-size: 12px; color: var(--dim); }
+  .termrow .tstate.run { color: var(--ok); }
+  .termrow .tstate.err { color: var(--err); }
+  /* 终端首页底栏（对应 #homebar） */
+  #termhome { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+              gap: 10px; max-width: 760px; margin: 0 auto;
+              padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); background: var(--bg); }
+  body.paired.hasterm.termtab:not(.insession):not(.interminal) #termhome { display: flex; }
+  #newterm { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; border: none;
+             border-radius: 24px; padding: 12px 18px; background: var(--text); color: var(--bg);
+             font-size: 16px; font-weight: 600; cursor: pointer; }
+  #newterm:active { opacity: .8; }
+  /* 终端页：画布 v1 恒深色，不随 App 主题切换（§14.2） */
+  #termpage { display: none; }
+  body.interminal #termpage { display: block; }
+  body.interminal main { padding-bottom: 0; }
+  body.interminal #list, body.interminal #termlist { display: none !important; }
+  #termscreen { height: calc(100dvh - 53px - var(--termbar-h, 158px)); background: #0c0e11;
+                padding: 4px 2px 0 6px; }
+  #termscreen .xterm { height: 100%; }
+  #termnotice { display: none; position: sticky; top: 53px; z-index: 10; font-size: 13px;
+                padding: 8px 12px; background: var(--warn-bg, rgba(180,140,40,.15)); color: var(--text); }
+  #termnotice.show { display: flex; align-items: center; gap: 10px; }
+  #termnotice .sp { flex: 1; }
+  #termnotice button { border: 1px solid var(--border); background: var(--raised); color: var(--text);
+                       border-radius: 8px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  /* 终端底部输入区：快捷键条 + 指令/键盘双模式（§4.5） */
+  #termbar { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+             background: var(--bg); border-top: 1px solid var(--border);
+             padding: 6px 8px calc(8px + env(safe-area-inset-bottom)); }
+  body.interminal #termbar { display: block; }
+  #termkeys { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 8px; scrollbar-width: none; }
+  #termkeys::-webkit-scrollbar { display: none; }
+  #termkeys button { flex: none; min-width: 44px; min-height: 36px; border: 1px solid var(--border);
+                     background: var(--raised); color: var(--text); border-radius: 9px;
+                     padding: 5px 10px; font-size: 13px; cursor: pointer;
+                     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  #termkeys button:active { background: var(--border); }
+  /* 修饰键锁定态：颜色 + 形状双标记（§14.2 可达性） */
+  #termkeys button.latch { background: var(--accent-bg); color: var(--accent);
+                           border-color: var(--accent); border-style: double; border-width: 3px; }
+  #termkeys button.intr { color: var(--err); }
+  #termcomposer { display: flex; align-items: flex-end; gap: 8px; }
+  #termmodeseg { flex: none; display: flex; flex-direction: column; gap: 4px; }
+  #termmodeseg button { border: 1px solid var(--border); background: var(--sunken); color: var(--dim);
+                        border-radius: 8px; padding: 4px 9px; font-size: 12px; cursor: pointer; }
+  #termmodeseg button.on { background: var(--raised); color: var(--text); border-color: var(--accent); }
+  #terminput { flex: 1; min-width: 0; background: var(--raised); border: 1px solid var(--border);
+               border-radius: 12px; padding: 9px 12px; color: var(--text);
+               font-size: 17px; line-height: 1.45; resize: none; max-height: 120px; }
+  #terminput:focus { outline: none; border-color: var(--accent); }
+  #termsend { flex: none; width: 38px; height: 38px; border: none; border-radius: 50%;
+              background: var(--text); color: var(--bg); font-size: 17px; cursor: pointer; }
+  #termsend:disabled { opacity: .35; }
+  body.termkbd #terminput, body.termkbd #termsend { display: none; }
+  /* 新建终端 Sheet */
+  .termsec { font-size: 12px; color: var(--dim); margin: 12px 2px 6px; }
+  .termopt { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+             background: var(--sunken); border: 1px solid var(--border); border-radius: 10px;
+             padding: 11px 13px; margin-bottom: 6px; cursor: pointer; color: var(--text); font: inherit; font-size: 14px; }
+  .termopt.on { border-color: var(--accent); background: var(--accent-bg); }
+  .termopt .sub { color: var(--dim); font-size: 12px; margin-left: auto; overflow: hidden;
+                  text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
+  #termcwd { width: 100%; background: var(--sunken); border: 1px solid var(--border); border-radius: 10px;
+             padding: 10px 12px; color: var(--text); font-size: 14px;
+             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  #termcwd:focus { outline: none; border-color: var(--accent); }
+  #termstart { width: 100%; margin-top: 14px; border: none; border-radius: 12px; padding: 13px;
+               background: var(--text); color: var(--bg); font: inherit; font-size: 15px;
+               font-weight: 600; cursor: pointer; }
+  #termstart:disabled { opacity: .45; }
+  .termlocked { text-align: center; color: var(--dim); padding: 60px 24px; font-size: 14px; line-height: 1.8; }
 </style>
 </head>
 <body>
@@ -867,6 +963,7 @@ try {
   <div class="mlabel m-session-label" data-i18n="menu.session">会话</div>
   <button data-act="archive-session" class="m-session"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/></svg><span data-i18n="menu.archive_session">归档当前会话</span></button>
   <button data-act="quick-commands" class="m-session"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v10H8l-4 4z"/><path d="M8 9h8"/><path d="M8 12h5"/></svg><span data-i18n="menu.quick_commands">快捷指令</span></button>
+  <button data-act="open-terminal" class="m-session" style="display:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span>在终端中打开此项目</span></button>
   <hr class="m-session-sep">
   <div class="mlabel" data-i18n="menu.appearance">外观</div>
   <div class="mseg" role="group" data-i18n-aria="menu.appearance" aria-label="外观">
@@ -1003,6 +1100,12 @@ try {
 <div id="toast"></div>
 <main>
   <div id="banner" class="banner"></div>
+  <div id="modeseg"><button id="modechat" class="on">会话</button><button id="modeterm">终端</button></div>
+  <div id="termlist"></div>
+  <div id="termpage">
+    <div id="termnotice"></div>
+    <div id="termscreen"></div>
+  </div>
   <div id="list"><div class="notice" data-i18n="list.loading">加载会话列表…</div></div>
   <div id="viewer">
     <div id="pulltip" role="button" aria-hidden="true" aria-disabled="true" tabindex="-1"><svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg><span class="txt"></span></div>
@@ -1012,6 +1115,28 @@ try {
   </div>
 </main>
 <button id="jump" data-i18n-aria="a11y.jump" aria-label="回到底部">↓</button>
+<div id="termhome">
+  <button id="newterm"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span>新建终端</span></button>
+</div>
+<div id="termbar">
+  <div id="termkeys"></div>
+  <div id="termcomposer">
+    <div id="termmodeseg"><button id="tmodeins" class="on">指令</button><button id="tmodekbd">键盘</button></div>
+    <textarea id="terminput" rows="1" placeholder="发送指令…"></textarea>
+    <button id="termsend" aria-label="发送" disabled>↑</button>
+  </div>
+</div>
+<div id="termsheet" class="sheet">
+  <div class="sheetbox">
+    <div class="sheethead">新建终端</div>
+    <div class="termsec">启动方式</div>
+    <div id="termpresets"></div>
+    <div class="termsec">工作目录</div>
+    <input id="termcwd" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="/path/to/project">
+    <div id="termcwds" style="margin-top:6px"></div>
+    <button id="termstart">启动</button>
+  </div>
+</div>
 <div id="homebar">
   <input id="search" type="search" data-i18n-ph="search.ph" placeholder="搜索会话…">
   <button id="newchat"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M18.4 2.6a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg><span data-i18n="btn.newchat">新会话</span></button>
@@ -2131,7 +2256,7 @@ class Session {
         : { deviceToken: this.info.deviceToken, protocol: APP_PROTOCOL, name: deviceLabel(), clientId: clientId() };
       // 信封序号能力走加密信道协商（中继剥不掉）；旧 daemon 忽略未知参数。
       // img:1=接收图片推送流（观众不推——其通知帧走低优先级 outbox，大图会挤爆）
-      authParams.caps = this.info.viewer ? { seq: 1 } : { seq: 1, img: 1 };
+      authParams.caps = this.info.viewer ? { seq: 1 } : { seq: 1, img: 1, terminal: 1 };
       let auth;
       this.awaitingAuth = true; // 鉴权确认前不让中继乐观的 online 把界面标绿
       try {
@@ -3667,6 +3792,12 @@ const app = {
   replayLoading: false,
   replayLastAt: 0,         // 客户端自限 ≥2s，与 daemon 的 viewer 频控对齐
   archivingSessionId: null, // 本机发起归档时抑制 board.changed 触发的二次返回
+  // —— Terminal Mode（internal/TERMINAL-MODE.md）——
+  homeTab: localStorage.getItem("czr-hometab") || "chat", // 首页模式：chat 会话 | term 终端（记忆）
+  terminals: [],           // terminal.list / terminal.listChanged 的最新列表
+  termPresets: null,       // terminal.presets 结果缓存 {presets, recentCwds}
+  term: null,              // 当前终端页状态（openTerminal 建，closeTerminalPage 清）
+  deepLinkTerminal: null,  // 通知深链带来的 terminalId（#t=...）
 };
 
 function showBanner(text, onTap) {
@@ -4253,6 +4384,9 @@ function updateLangChecks() {
 function updateMenuState() {
   const archive = document.querySelector('#topmenu button[data-act="archive-session"]');
   if (archive) archive.disabled = app.view !== "session" || isDraftSession() || app.isViewer;
+  // 「在终端中打开此项目」（§4.2）：仅会话视图 + 终端能力可用时出现
+  const ot = document.querySelector('#topmenu button[data-act="open-terminal"]');
+  if (ot) ot.style.display = app.view === "session" && termCapable() && !isDraftSession() ? "" : "none";
 }
 
 // —— 快捷指令：纯前端偏好，一份普通文本列表，不扩展 daemon 协议 ——
@@ -8151,6 +8285,8 @@ function handleNotify(msg) {
   } else if (msg.method === "daemon.status") {
     net.engine = msg.params?.engine ?? null; // 引擎掉线/恢复（分层诊断）
     updateStatusPill();
+  } else if (typeof msg.method === "string" && msg.method.startsWith("terminal.")) {
+    handleTermNotify(msg); // Terminal Mode 帧（output/snapshot/exited/…）统一入口
   }
 }
 
@@ -8353,6 +8489,11 @@ function startSession(info) {
   session.onStatus = (patch) => {
     Object.assign(net, patch);
     updateStatusPill();
+    // 终端页断线态：保留画面、亮"正在恢复"（重连成功由 onReady 的 attach 解除）
+    if (app.term && (patch.link === "down" || patch.daemon === false)) {
+      app.term.reconnecting = true;
+      updateTermNotice();
+    }
   };
   session.onNotify = handleNotify;
   // 观众的 403 不是"设备被移除"：进入"围观已结束"终态，不动 czr-daemons
@@ -8393,7 +8534,22 @@ function startSession(info) {
     }
     loadAgents();     // 优先填充 agent 切换器（失败静默，仅 codex；<2 后端时隐藏）
     prefetchModels(); // 静默：给模型胶囊补上电脑端默认模型号
+    updateHomeTab();  // 终端能力随本次 auth 的 caps 刷新（换绑电脑/开关变化）
     try {
+      if (app.view === "terminal" && app.term) {
+        // 重连后恢复终端订阅：带 generation+haveSeq，daemon ring 命中则增量续传。
+        // reconnecting 保持到 attach 成功才由 attachTerminal 清（失败则续显"正在恢复"并重试）
+        attachTerminal().catch(() => {});
+        return;
+      }
+      // 终端通知深链：连上后直达终端页；落地非 owner 时 attach 流程会亮出接管入口
+      if (app.deepLinkTerminal && termCapable()) {
+        const tid = app.deepLinkTerminal;
+        app.deepLinkTerminal = null;
+        setHomeTab("term");
+        await openTerminal(tid);
+        return;
+      }
       if (app.view === "session" && app.currentId && !isDraftSession()) {
         // 重连后恢复当前会话实时订阅；带 have 游标只补断线期间的缺口。
         await watchCurrentSession(session);
@@ -8588,6 +8744,678 @@ function renderOnboarding() {
 }
 
 // —— 一次性启动 ——
+// —— Terminal Mode 前端（internal/TERMINAL-MODE.md §4/§9/§14）——
+// 画布 v1 恒深色：固定精调 16 色 palette，不随 App 主题/accent 变化（§14.2）。
+const TERM_THEME = {
+  background: "#0c0e11", foreground: "#d8dee9", cursor: "#d8dee9", cursorAccent: "#0c0e11",
+  selectionBackground: "rgba(110,150,210,.35)",
+  black: "#3b4252", red: "#e06c75", green: "#98c379", yellow: "#e5c07b",
+  blue: "#61afef", magenta: "#c678dd", cyan: "#56b6c2", white: "#c8ccd4",
+  brightBlack: "#5c6370", brightRed: "#ef7a85", brightGreen: "#a9d389", brightYellow: "#f0cf8b",
+  brightBlue: "#74bbff", brightMagenta: "#d38ae8", brightCyan: "#66c6d2", brightWhite: "#e6e6e6",
+};
+const TERM_KEYS = [
+  { label: "Esc", seq: "\x1b" },
+  { label: "Tab", seq: "\t" },
+  { label: "↵", seq: "\r" },
+  { label: "Ctrl", latch: "ctrl" },
+  { label: "Alt", latch: "alt" },
+  { label: "←", seq: "\x1b[D", arrow: "D" },
+  { label: "↓", seq: "\x1b[B", arrow: "B" },
+  { label: "↑", seq: "\x1b[A", arrow: "A" },
+  { label: "→", seq: "\x1b[C", arrow: "C" },
+  { label: "中断", intr: true },
+];
+
+// xterm 静态资源懒加载：300KB 不进首屏；<script src> 本地 vendor（§14.1）
+let xtermLoadPromise = null;
+function loadXterm() {
+  if (window.Terminal && window.FitAddon) return Promise.resolve();
+  if (xtermLoadPromise) return xtermLoadPromise;
+  xtermLoadPromise = new Promise((resolve, reject) => {
+    const css = document.createElement("link");
+    css.rel = "stylesheet";
+    css.href = "vendor/xterm/xterm.css";
+    document.head.appendChild(css);
+    let left = 3;
+    for (const src of ["vendor/xterm/xterm.js", "vendor/xterm/addon-fit.js", "vendor/xterm/addon-unicode11.js"]) {
+      const s = document.createElement("script");
+      s.src = src;
+      s.onload = () => { if (--left === 0) resolve(); };
+      s.onerror = () => { xtermLoadPromise = null; reject(new Error("终端组件加载失败")); };
+      document.head.appendChild(s);
+    }
+  });
+  return xtermLoadPromise;
+}
+
+function myDeviceId() {
+  return app.session?.lastAuth?.deviceId ?? null;
+}
+
+function termCapable() {
+  return !app.isViewer && app.session?.serverCaps?.terminal === 1;
+}
+
+// 首页「会话 / 终端」二段切换：能力驱动显隐 + 记忆（§4.1）
+function updateHomeTab() {
+  const has = termCapable();
+  document.body.classList.toggle("hasterm", has);
+  if (!has && app.homeTab === "term") app.homeTab = "chat"; // 换绑到不支持的电脑：回落会话模式
+  const term = has && app.homeTab === "term";
+  document.body.classList.toggle("termtab", term);
+  $("modechat").classList.toggle("on", !term);
+  $("modeterm").classList.toggle("on", term);
+  if (term) refreshTerminals().catch(() => {});
+}
+
+function setHomeTab(tab) {
+  app.homeTab = tab;
+  localStorage.setItem("czr-hometab", tab);
+  updateHomeTab();
+}
+
+async function refreshTerminals() {
+  if (!termCapable()) return;
+  try {
+    const r = await app.session.request("terminal.list");
+    app.terminals = r?.terminals ?? [];
+    renderTermList();
+  } catch (err) {
+    // 403 = 本设备未授权：显示权限锁定页而非通用错误（§4.1）
+    if (err.code === 403) {
+      $("termlist").innerHTML = `<div class="termlocked">此设备尚未获得终端授权。<br>请在电脑端的 CXX 设置中为本设备开启「终端」权限。</div>`;
+    }
+  }
+}
+
+function termAgo(ts) {
+  if (!ts) return "";
+  const m = Math.floor((Date.now() - ts) / 60000);
+  if (m < 1) return "刚刚有输出";
+  if (m < 60) return `${m} 分钟无输出`;
+  return `${Math.floor(m / 60)} 小时无输出`;
+}
+
+const TERM_STATE_LABEL = {
+  CREATING: ["正在启动", ""], RUNNING: ["运行中", "run"], DETACHED: ["运行中", "run"],
+  STOPPING: ["正在结束", ""], EXITED: ["已退出", ""], FAILED: ["启动失败", "err"],
+};
+
+function renderTermList() {
+  const box = $("termlist");
+  if (!app.terminals.length) {
+    box.innerHTML = `<div class="termlocked">还没有终端。<br>点下方「新建终端」，在电脑上启动一个 Shell 或 CLI Agent。</div>`;
+    return;
+  }
+  box.innerHTML = "";
+  const sorted = [...app.terminals].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  for (const tv of sorted) {
+    const row = document.createElement("button");
+    row.className = "termrow";
+    const [label, cls] = TERM_STATE_LABEL[tv.status] ?? [tv.status, ""];
+    const running = tv.status === "RUNNING" || tv.status === "DETACHED";
+    const sub = tv.status === "EXITED"
+      ? `exit ${tv.exitCode ?? tv.exitSignal ?? "?"}`
+      : running ? termAgo(tv.lastOutputAt) : "";
+    row.innerHTML = `<div class="tmain"><div class="tname"></div><div class="tsub"></div></div><span class="tstate ${cls}"></span>`;
+    row.querySelector(".tname").textContent = tv.title;
+    row.querySelector(".tsub").textContent = [tv.cwd, sub].filter(Boolean).join(" · ");
+    row.querySelector(".tstate").textContent = label;
+    row.onclick = () => openTerminal(tv.terminalId);
+    box.appendChild(row);
+  }
+}
+
+// —— 新建终端 Sheet（§4.3）——
+// prefill：从结构化会话进入时预填当前目录与推荐 preset（§4.2）
+let termSheetSel = null; // 选中的 presetId
+async function openTermSheet(prefill = null) {
+  try {
+    app.termPresets = await app.session.request("terminal.presets");
+  } catch (err) {
+    showToast(err.code === 403 ? "此设备尚未获得终端授权" : `无法获取启动方式：${err.message}`);
+    return;
+  }
+  const presets = app.termPresets?.presets ?? [];
+  termSheetSel = (prefill?.presetId && presets.some((p) => p.id === prefill.presetId))
+    ? prefill.presetId
+    : presets[0]?.id ?? "shell";
+  const box = $("termpresets");
+  box.innerHTML = "";
+  for (const p of presets) {
+    const b = document.createElement("button");
+    b.className = "termopt" + (p.id === termSheetSel ? " on" : "");
+    b.textContent = p.name;
+    b.onclick = () => {
+      termSheetSel = p.id;
+      for (const el of box.children) el.classList.remove("on");
+      b.classList.add("on");
+    };
+    box.appendChild(b);
+  }
+  const cwds = app.termPresets?.recentCwds ?? [];
+  const known = [...new Set([...cwds, ...[...app.projByCwd.keys()]])].slice(0, 6);
+  $("termcwd").value = prefill?.cwd ?? cwds[0] ?? known[0] ?? "";
+  const cbox = $("termcwds");
+  cbox.innerHTML = "";
+  for (const c of known) {
+    const b = document.createElement("button");
+    b.className = "termopt";
+    b.textContent = c.split("/").pop() || c;
+    const sub = document.createElement("span");
+    sub.className = "sub";
+    sub.textContent = c;
+    b.appendChild(sub);
+    b.onclick = () => { $("termcwd").value = c; };
+    cbox.appendChild(b);
+  }
+  $("termstart").disabled = false;
+  $("termsheet").classList.add("open");
+}
+
+async function startTerminal() {
+  const cwd = $("termcwd").value.trim();
+  if (!cwd || !termSheetSel) return;
+  $("termstart").disabled = true;
+  try {
+    const view = await app.session.request("terminal.create", {
+      presetId: termSheetSel,
+      cwd,
+      cols: 80,
+      rows: 24,
+    });
+    $("termsheet").classList.remove("open");
+    app.terminals = [view, ...app.terminals.filter((x) => x.terminalId !== view.terminalId)];
+    // 从结构化会话进入（§4.2）：先退出会话视图，历史项就地替换成终端页，
+    // 返回键直接回首页而不是穿回旧会话
+    const fromSession = app.view === "session";
+    if (fromSession) {
+      await closeSession().catch(() => {});
+      setHomeTab("term");
+    }
+    openTerminal(view.terminalId, { replace: fromSession });
+  } catch (err) {
+    showToast(`启动失败：${err.message}`);
+  } finally {
+    $("termstart").disabled = false;
+  }
+}
+
+// —— 终端页（§4.5–§4.7）——
+function termView(tid) {
+  return app.terminals.find((x) => x.terminalId === tid) ?? null;
+}
+
+let termOpenToken = 0;
+async function openTerminal(terminalId, opts = {}) {
+  if (app.view === "terminal" && app.term?.id === terminalId) return;
+  if (app.term) disposeTermPage(); // 从一个终端直切另一个（深链）
+  // 重入闸：两次快点（或首次 loadXterm 的多秒等待期间再点）会让两个调用都越过 app.term
+  // 判空，后者覆盖 app.term 却不 dispose 前者、也不 detach——旧订阅与 xterm 实例泄漏。
+  const token = ++termOpenToken;
+  if (!termView(terminalId)) await refreshTerminals().catch(() => {});
+  if (token !== termOpenToken) return; // 已被更晚的 open 顶替
+  const tv = termView(terminalId);
+  try {
+    await loadXterm();
+  } catch (err) {
+    showToast(err.message);
+    return;
+  }
+  if (token !== termOpenToken) return;
+  {
+    const url = "#t=" + encodeURIComponent(terminalId);
+    if (app.view !== "terminal" && !opts.replace) history.pushState({ czr: "terminal" }, "", url);
+    // 已在终端页内切到另一个终端（深链）：就地替换，否则 URL/历史项仍指向旧终端，刷新会开错
+    else history.replaceState({ czr: "terminal" }, "", url);
+  }
+  app.view = "terminal";
+  document.body.classList.add("interminal");
+  $("back").style.display = "flex";
+  $("sharebtn").style.display = "none";
+  setTitle(tv?.title ?? "终端");
+  const presets = app.termPresets?.presets ?? [];
+  const preset = presets.find((p) => p.id === tv?.presetId) ?? null;
+  // 模式记忆（per preset），首次按 preset 默认（Agent=指令、Shell=键盘）
+  const savedMode = localStorage.getItem(`czr-termmode-${tv?.presetId ?? "shell"}`);
+  const mode = savedMode || (preset?.defaultInputMode === "keyboard" ? "kbd" : "ins");
+  const fontSize = Math.max(10, Math.min(22, Number(localStorage.getItem("czr-termfont")) || 13));
+  const xt = new window.Terminal({
+    cols: tv?.cols || 80,
+    rows: tv?.rows || 24,
+    theme: TERM_THEME,
+    fontSize,
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+    scrollback: 2000,
+    minimumContrastRatio: 3.5, // 可读性兜底（§14.2；真机实测 3–4.5 区间取中）
+    allowProposedApi: true,
+    screenReaderMode: false,
+  });
+  const fit = new window.FitAddon.FitAddon();
+  xt.loadAddon(fit);
+  try {
+    const u11 = new window.Unicode11Addon.Unicode11Addon();
+    xt.loadAddon(u11);
+    xt.unicode.activeVersion = "11"; // CJK 宽字符网格对齐
+  } catch {}
+  app.term = {
+    id: terminalId,
+    generation: null,
+    haveSeq: 0,
+    xt,
+    fit,
+    isOwner: false,
+    ownerName: "",
+    status: tv?.status ?? "RUNNING",
+    exitCode: null,
+    inputMode: mode,
+    presetKeys: preset?.quickKeys ?? [],
+    latch: { ctrl: false, alt: false },
+    snapParts: [],
+    snapGen: null,
+    attaching: false,
+    resyncAt: 0,
+    resizeTimer: null,
+    reconnecting: false,
+  };
+  $("termscreen").innerHTML = "";
+  xt.open($("termscreen"));
+  // 键盘模式：xterm 捕获按键 → 原始字节直发；修饰键锁定在此变换
+  xt.onData((d) => {
+    if (!app.term || app.term.inputMode !== "kbd") return;
+    termSendRaw(applyLatch(d));
+  });
+  renderTermKeys();
+  setTermMode(mode, { silent: true });
+  updateTermbarHeight();
+  fitTerm({ send: false });
+  await attachTerminal();
+  if (!localStorage.getItem("czr-termguide")) {
+    localStorage.setItem("czr-termguide", "1");
+    showToast("自然语言在下方发送；特殊按键在工具栏，「键盘」模式可直接敲字");
+  }
+}
+
+async function attachTerminal() {
+  const st = app.term;
+  if (!st) return;
+  if (st.attaching) { st.needReattach = true; return; } // 在途：记下待办，finally 里补跑
+  st.attaching = true;
+  st.needReattach = false;
+  try {
+    const params = { terminalId: st.id, cols: st.xt.cols, rows: st.xt.rows };
+    // 断线重连的增量续传：带上代次与已收字节游标，daemon ring 命中时免整屏快照
+    if (st.generation && st.haveSeq > 0) {
+      params.generation = st.generation;
+      params.haveSeq = st.haveSeq;
+    }
+    const res = await app.session.request("terminal.attach", params);
+    if (!app.term || app.term !== st) return;
+    // 注意：snapshot 模式下快照帧先于本应答到达（同一有序通道），generation 已由
+    // 快照 final 采纳；这里再赋值是幂等的。delta 模式下代次本就未变。
+    st.generation = res.generation;
+    st.status = res.status;
+    st.exitCode = res.exitCode;
+    st.isOwner = !!res.ownerDeviceId && res.ownerDeviceId === myDeviceId();
+    st.ownerName = res.ownerDeviceName ?? "";
+    // daemon 重启翻代（restore 后 owner 清零）：无 owner 时首个进来的设备直接接管
+    if (!res.ownerDeviceId && res.status !== "EXITED" && res.status !== "FAILED") {
+      try {
+        await app.session.request("terminal.takeover", { terminalId: st.id });
+        st.isOwner = true;
+      } catch {}
+    }
+    if (!st.isOwner && res.cols && res.rows) st.xt.resize(res.cols, res.rows); // 非 owner 按 owner 尺寸只读渲染
+    if (st.isOwner) fitTerm({ send: true });
+    st.reconnecting = false;
+    updateTermNotice();
+  } catch (err) {
+    if (err.code === 404) {
+      showToast("终端不存在（可能已被清理）");
+      if (app.view === "terminal") history.back(); // 经 popstate 统一收尾，不留孤儿历史项
+      else closeTerminalPageView();
+      return;
+    }
+    if (err.code === 403) showToast("此设备尚未获得终端授权");
+    // 瞬时失败：不能干等（resync 只由输出帧触发，而未 attach 就收不到帧 → 死锁在
+    // "正在恢复终端…"）。标记待重连，由下方 finally 退避重试。
+    if (app.term === st) st.needReattach = true;
+  } finally {
+    if (app.term === st) {
+      st.attaching = false;
+      // 在途期间被 requestTermResync/失败标记的重连请求：补跑（退避 600ms 防抖）
+      if (st.needReattach) {
+        st.needReattach = false;
+        clearTimeout(st.reattachTimer);
+        st.reattachTimer = setTimeout(() => {
+          if (app.term === st && app.view === "terminal") attachTerminal().catch(() => {});
+        }, 600);
+      }
+    }
+  }
+}
+
+// 终端通知帧统一入口（handleNotify 转发）
+function handleTermNotify(msg) {
+  const p = msg.params ?? {};
+  if (msg.method === "terminal.listChanged") {
+    app.terminals = p.terminals ?? app.terminals;
+    if (app.view === "list" && app.homeTab === "term") renderTermList();
+    const tv = app.term && termView(app.term.id);
+    if (tv && app.term.status !== tv.status) {
+      app.term.status = tv.status;
+      if (tv.exitCode != null) app.term.exitCode = tv.exitCode; // 否则退出条显示 "exit ?"
+      updateTermNotice();
+    }
+    return;
+  }
+  const st = app.term;
+  if (!st || p.terminalId !== st.id) return;
+  if (msg.method === "terminal.output") {
+    if (p.generation !== st.generation) return; // 旧代次残帧
+    const bytes = b64decode(p.data);
+    if (p.seq > st.haveSeq) { requestTermResync(); return; } // 缺口：走快照恢复
+    const skip = st.haveSeq - p.seq; // 增量补发可能与已收字节部分重叠：裁掉
+    if (skip < bytes.length) st.xt.write(skip > 0 ? bytes.subarray(skip) : bytes);
+    st.haveSeq = Math.max(st.haveSeq, p.seq + bytes.length);
+  } else if (msg.method === "terminal.snapshot") {
+    // 快照帧先于 attach 应答到达（daemon 在应答前推送）：part 0 即采纳其代次，
+    // 不能拿本地旧 generation 过滤——daemon 重启翻代后那样会把新快照整个丢掉
+    if (p.part === 0) {
+      st.snapParts = [];
+      st.snapGen = p.generation;
+    } else if (p.generation !== st.snapGen) {
+      return;
+    }
+    st.snapParts.push(p.data);
+    if (p.final) {
+      const data = st.snapParts.join("");
+      st.snapParts = [];
+      st.generation = p.generation;
+      // 先 resize 到快照生成时的 PTY 尺寸，再写：ANSI 快照按当时 cols 编码，
+      // 若先写进当前不同宽度的 xterm 会按错误宽度折行，之后再 resize 只会把已错的折行重排
+      if (p.cols && p.rows && (p.cols !== st.xt.cols || p.rows !== st.xt.rows)) {
+        st.xt.resize(p.cols, p.rows);
+      }
+      st.xt.reset();
+      if (data) st.xt.write(data);
+      st.haveSeq = p.nextSeq ?? st.haveSeq;
+    }
+  } else if (msg.method === "terminal.exited") {
+    st.status = "EXITED";
+    st.exitCode = p.exitCode ?? null;
+    updateTermNotice();
+  } else if (msg.method === "terminal.controlChanged") {
+    st.isOwner = !!p.youAreOwner;
+    st.ownerName = p.ownerDeviceName ?? "";
+    if (st.isOwner) fitTerm({ send: true });
+    updateTermNotice();
+  } else if (msg.method === "terminal.resyncRequired") {
+    requestTermResync();
+  }
+}
+
+function b64decode(b64) {
+  const bin = atob(b64 || "");
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+// 拥塞/缺口恢复：重新 attach 拿快照；1s 节流防循环
+function requestTermResync() {
+  const st = app.term;
+  if (!st) return;
+  const now = Date.now();
+  if (now - st.resyncAt < 1000) return;
+  st.resyncAt = now;
+  st.generation = null; // 强制走快照路径
+  st.haveSeq = 0;
+  attachTerminal().catch(() => {});
+}
+
+// —— 输入 ——
+// 修饰键锁定只对"单字符"生效并即时清除。键盘模式下 xterm.onData 常一次送多字符
+// （IME 提交、粘贴、方向键 seq）：若不清 latch，Ctrl 会滞留到之后某个单键上，
+// 把无关按键静默变成控制字符（如 c→ETX 杀掉进程）。故任何输入都消费 latch。
+function applyLatch(d) {
+  const st = app.term;
+  if (!st) return d;
+  const hadCtrl = st.latch.ctrl;
+  const hadAlt = st.latch.alt;
+  if (!hadCtrl && !hadAlt) return d;
+  let out = d;
+  // 只在单字符时施加变换；多字符输入直接清 latch 不变换（避免误伤整段 IME 文本）
+  if (d.length === 1) {
+    if (hadCtrl) {
+      const c = d.toUpperCase().charCodeAt(0);
+      if (c >= 64 && c <= 95) out = String.fromCharCode(c & 0x1f);
+    }
+    if (hadAlt) out = "\x1b" + out;
+  }
+  st.latch.ctrl = false;
+  st.latch.alt = false;
+  renderTermKeys();
+  return out;
+}
+
+function b64encodeBytes(bytes) {
+  // 分块避免 String.fromCharCode(...bytes) 在大粘贴时爆栈（apply/spread 参数上限）
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(s);
+}
+
+function termSendRaw(data) {
+  const st = app.term;
+  if (!st) return;
+  if (!st.isOwner) { updateTermNotice(true); return; }
+  const b64 = b64encodeBytes(new TextEncoder().encode(data));
+  app.session.request("terminal.input", { terminalId: st.id, data: b64 }).catch((err) => {
+    if (err.code === 409) { updateTermNotice(true); }
+  });
+}
+
+async function sendTermInstruction() {
+  const st = app.term;
+  const text = $("terminput").value;
+  if (!st || !text.trim()) return;
+  if (!st.isOwner) { updateTermNotice(true); return; }
+  $("termsend").disabled = true;
+  try {
+    // 指令模式：text+submit 一次写入；bracketed paste 由 daemon 按 DECSET 2004 状态包裹
+    await app.session.request("terminal.input", { terminalId: st.id, text, submit: true });
+    $("terminput").value = ""; // ack 后才清（§4.5 草稿保护）
+    termInputGrow();
+    updateTermSendState();
+  } catch (err) {
+    showToast(err.code === 409 ? "当前设备不是控制者，请先接管" : `发送结果未知：${err.message}`);
+  } finally {
+    $("termsend").disabled = false;
+    updateTermSendState();
+  }
+}
+
+function setTermMode(mode, opts = {}) {
+  const st = app.term;
+  if (!st) return;
+  st.inputMode = mode;
+  const tv = termView(st.id);
+  localStorage.setItem(`czr-termmode-${tv?.presetId ?? "shell"}`, mode);
+  document.body.classList.toggle("termkbd", mode === "kbd");
+  $("tmodeins").classList.toggle("on", mode === "ins");
+  $("tmodekbd").classList.toggle("on", mode === "kbd");
+  st.latch.ctrl = st.latch.alt = false;
+  renderTermKeys();
+  updateTermbarHeight();
+  if (mode === "kbd") st.xt.focus();
+  else st.xt.blur();
+  if (!opts.silent) fitTerm({ send: st.isOwner });
+}
+
+function renderTermKeys() {
+  const st = app.term;
+  const box = $("termkeys");
+  box.innerHTML = "";
+  if (!st) return;
+  const keys = [...TERM_KEYS];
+  for (const qk of st.presetKeys) keys.splice(3, 0, { label: qk.label, seq: qk.seq }); // preset 键放前排（↵ 之后）
+  for (const k of keys) {
+    const b = document.createElement("button");
+    b.textContent = k.label;
+    if (k.intr) b.className = "intr";
+    if (k.latch) b.classList.toggle("latch", st.latch[k.latch]);
+    // pointerdown 而非 click：避免键盘模式下点按钮把 xterm 焦点抢走、软键盘塌掉
+    b.onpointerdown = (e) => {
+      e.preventDefault();
+      if (k.intr) {
+        if (!st.isOwner) { updateTermNotice(true); return; } // 只读时"中断"也该弹接管，不能假装已中断
+        app.session.request("terminal.signal", { terminalId: st.id, kind: "interrupt" }).catch(() => {});
+      } else if (k.latch) {
+        st.latch[k.latch] = !st.latch[k.latch];
+        renderTermKeys();
+      } else {
+        // 方向键随应用光标模式（DECCKM）选 SS3(ESC O) 或 CSI(ESC [)：vim/less 等全屏
+        // 应用置 DECCKM 后期待 SS3，硬发 CSI 会导致方向键在其中失灵
+        let seq = k.seq;
+        if (k.arrow && st.xt.modes?.applicationCursorKeysMode) seq = "\x1bO" + k.arrow;
+        termSendRaw(applyLatch(seq));
+      }
+    };
+    box.appendChild(b);
+  }
+  // 字号调节（§14.2 A-/A+）
+  for (const [label, delta] of [["A−", -1], ["A＋", +1]]) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.onpointerdown = (e) => {
+      e.preventDefault();
+      const cur = st.xt.options.fontSize;
+      const next = Math.max(10, Math.min(22, cur + delta));
+      if (next === cur) return;
+      st.xt.options.fontSize = next;
+      localStorage.setItem("czr-termfont", String(next));
+      fitTerm({ send: st.isOwner });
+    };
+    box.appendChild(b);
+  }
+}
+
+// 顶部状态条：退出 / 非 owner / 恢复中
+function updateTermNotice(pulse = false) {
+  const st = app.term;
+  const n = $("termnotice");
+  n.textContent = "";
+  n.className = "";
+  if (!st) return;
+  // 用 DOM 构造，绝不用 innerHTML 拼接：ownerName 是别的手机上报的设备名（daemon 侧
+  // 只清控制字符、不转义 HTML），拼进 innerHTML 就是存储型 XSS（拿到本域配对令牌）。
+  const mkSpan = (text) => { const s = document.createElement("span"); s.textContent = text; return s; };
+  const mkBtn = (id, text) => { const b = document.createElement("button"); b.id = id; b.textContent = text; return b; };
+  const sp = () => { const s = document.createElement("span"); s.className = "sp"; return s; };
+  let shown = false;
+  if (st.status === "EXITED" || st.status === "FAILED") {
+    const how = st.status === "FAILED" ? "启动失败" : `已退出 · exit ${st.exitCode ?? "?"}`;
+    n.append(mkSpan(how), sp(), mkBtn("termrm", "关闭并移除"));
+    shown = true;
+  } else if (st.reconnecting) {
+    n.append(mkSpan("正在恢复终端…"));
+    shown = true;
+  } else if (!st.isOwner) {
+    const who = st.ownerName || "另一台设备";
+    n.append(mkSpan(`当前由「${who}」控制，本机只读`), sp(), mkBtn("termtake", "接管"));
+    shown = true;
+  }
+  n.className = shown ? "show" : "";
+  const rm = document.getElementById("termrm");
+  if (rm) rm.onclick = async () => {
+    try {
+      await app.session.request("terminal.close", { terminalId: st.id });
+      history.back(); // 弹掉 #t 历史项，视图收尾统一走 popstate → closeTerminalPageView
+    } catch (err) { showToast(err.message); }
+  };
+  const take = document.getElementById("termtake");
+  if (take) take.onclick = async () => {
+    try {
+      await app.session.request("terminal.takeover", { terminalId: st.id });
+      st.isOwner = true;
+      fitTerm({ send: true });
+      updateTermNotice();
+    } catch (err) { showToast(`接管失败：${err.message}`); }
+  };
+  if (pulse && !st.isOwner) showToast("当前为只读，点「接管」后可输入");
+  updateTermbarHeight();
+}
+
+// —— 尺寸 ——
+function updateTermbarHeight() {
+  requestAnimationFrame(() => {
+    const h = $("termbar").offsetHeight || 158;
+    document.documentElement.style.setProperty("--termbar-h", `${h}px`);
+  });
+}
+
+function fitTerm({ send } = {}) {
+  const st = app.term;
+  if (!st) return;
+  if (!st.isOwner && st.generation) return; // 非 owner 不改真实尺寸（§4.7）
+  requestAnimationFrame(() => {
+    if (!app.term || app.term !== st) return;
+    try { st.fit.fit(); } catch {}
+    if (send && st.isOwner) {
+      clearTimeout(st.resizeTimer);
+      // 软键盘/旋转动画期间不连续轰炸 PTY：稳定 400ms 后发最终值
+      st.resizeTimer = setTimeout(() => {
+        if (app.term !== st || !st.isOwner) return;
+        app.session.request("terminal.resize", {
+          terminalId: st.id, cols: st.xt.cols, rows: st.xt.rows,
+        }).catch(() => {});
+      }, 400);
+    }
+  });
+}
+
+function updateTermSendState() {
+  $("termsend").disabled = !$("terminput").value.trim();
+}
+
+function termInputGrow() {
+  const el = $("terminput");
+  el.style.height = "auto";
+  el.style.height = `${Math.min(120, el.scrollHeight)}px`;
+  updateTermbarHeight();
+}
+
+// 离开终端页（视图部分；popstate/返回键统一走这里）
+function disposeTermPage() {
+  const st = app.term;
+  if (!st) return;
+  clearTimeout(st.resizeTimer);
+  clearTimeout(st.reattachTimer);
+  app.session?.request("terminal.detach", { terminalId: st.id }).catch(() => {});
+  try { st.xt.dispose(); } catch {}
+  app.term = null;
+  $("termscreen").innerHTML = "";
+  $("termnotice").className = "";
+  $("terminput").value = "";
+  document.body.classList.remove("termkbd");
+}
+
+function closeTerminalPageView() {
+  disposeTermPage();
+  app.view = "list";
+  document.body.classList.remove("interminal");
+  $("back").style.display = "none";
+  $("sharebtn").style.display = "";
+  setTitle(t("brand"));
+  updateStatusPill();
+  updateHomeTab();
+  refreshTerminals().catch(() => {});
+}
+
 async function main() {
   // i18n：先定语言，填静态标记，再渲染任何视图
   document.documentElement.lang = LANG === "zh" ? "zh-CN" : "en";
@@ -8606,6 +9434,8 @@ async function main() {
   //  · 会话内 → 回首页（会话历史项已被弹出，栈里仍留首页哨兵）；
   //  · 首页 → 拦一次并提示，1.6s 内再按一次才真正退出（防误触）。
   window.addEventListener("popstate", () => {
+    // 终端页返回：退订观察（不结束 PTY），回终端列表
+    if (app.view === "terminal") { closeTerminalPageView(); return; }
     // 观众无列表可回：返回键与首页同款"再按一次退出"
     if (app.view === "session" && !app.isViewer) { closeSession().catch(() => {}); return; }
     if (app.backExit) { history.back(); return; } // 第二次：不再压回，放行退出
@@ -8719,12 +9549,19 @@ async function main() {
       $("composer").style.transform = shift;
       $("jump").style.transform = shift;
       $("homebar").style.transform = shift; // 首页搜索框也不能被键盘盖住
+      $("termbar").style.transform = shift; // 终端输入区同理
     };
-    const keyboardTargetFocused = () => document.activeElement === $("input") || document.activeElement === $("search");
+    const keyboardTargetFocused = () =>
+      document.activeElement === $("input") || document.activeElement === $("search") ||
+      document.activeElement === $("terminput") ||
+      // 键盘模式：焦点在 xterm 隐藏 helper textarea 上，否则快捷键条被软键盘整个盖住
+      (app.view === "terminal" && $("termscreen").contains(document.activeElement));
     const adjust = () => {
       const gap = keyboardTargetFocused() ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
       const shift = gap > 80 ? `translateY(-${Math.round(gap)}px)` : "";
       setKeyboardShift(shift);
+      // 终端画布高度用 100dvh（不认键盘），键盘弹起后光标行可能被盖：refit 让 xterm 缩行
+      if (app.view === "terminal" && app.term) fitTerm({ send: app.term.isOwner });
     };
     const scheduleAdjust = () => {
       requestAnimationFrame(adjust);
@@ -8831,6 +9668,11 @@ async function main() {
     } else if (act === "quick-commands") {
       $("topmenu").classList.remove("open");
       openQuickCommandsSheet();
+    } else if (act === "open-terminal") {
+      // 在终端中打开此项目（§4.2）：预填当前目录；Claude 会话推荐 Claude preset
+      $("topmenu").classList.remove("open");
+      const known = app.knownById.get(app.currentId);
+      openTermSheet({ cwd: known?.cwd || null, presetId: app.agent === "claude" ? "claude" : null });
     } else if (act === "pc") {
       $("topmenu").classList.remove("open");
       openSheet();
@@ -8839,6 +9681,26 @@ async function main() {
       openDiag();
     }
   };
+  // —— Terminal Mode 绑定 ——
+  $("modechat").onclick = () => setHomeTab("chat");
+  $("modeterm").onclick = () => setHomeTab("term");
+  $("newterm").onclick = openTermSheet;
+  $("termstart").onclick = startTerminal;
+  $("termsheet").onclick = (e) => { if (e.target === $("termsheet")) $("termsheet").classList.remove("open"); };
+  $("tmodeins").onclick = () => setTermMode("ins");
+  $("tmodekbd").onclick = () => setTermMode("kbd");
+  $("termsend").onclick = sendTermInstruction;
+  $("terminput").addEventListener("input", () => { termInputGrow(); updateTermSendState(); });
+  $("terminput").addEventListener("keydown", (e) => {
+    // 桌面 Enter 发送、Shift+Enter 换行；手机键盘 Enter 保持换行（与主 composer 一致）
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && matchMedia("(pointer: fine)").matches) {
+      e.preventDefault();
+      sendTermInstruction();
+    }
+  });
+  window.addEventListener("resize", () => {
+    if (app.view === "terminal") { updateTermbarHeight(); fitTerm({ send: true }); }
+  });
   $("sheet").onclick = (e) => { if (e.target === $("sheet")) $("sheet").classList.remove("open"); };
   $("dirsheet").onclick = (e) => { if (e.target === $("dirsheet")) $("dirsheet").classList.remove("open"); };
   $("diagsheet").onclick = (e) => { if (e.target === $("diagsheet")) $("diagsheet").classList.remove("open"); };
@@ -8882,6 +9744,9 @@ async function main() {
   if (hashParams.get("s")) {
     app.deepLink = hashParams.get("s");
     app.deepLinkAgent = hashParams.get("a") || null; // Claude 通知深链带 a=claude
+    history.replaceState(null, "", location.pathname);
+  } else if (hashParams.get("t")) {
+    app.deepLinkTerminal = hashParams.get("t"); // 终端通知深链（#t=<terminalId>，§12.3）
     history.replaceState(null, "", location.pathname);
   }
 

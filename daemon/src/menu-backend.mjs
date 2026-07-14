@@ -39,6 +39,7 @@ import {
   saveConfig,
 } from "./config.mjs";
 import { Notifier, normalizeNotifier, redact } from "./notify.mjs";
+import { listPtyHosts, reattachPtyHost, resolvePtyHostBin } from "./pty-adapter.mjs";
 import { writeQrBmp } from "./qr-bmp.mjs";
 import { compareVersions, cxxVersion } from "./version.mjs";
 
@@ -212,6 +213,74 @@ export async function notifyTestIndex(deps, index) {
   return { ok: true, count: notifier.count };
 }
 
+// —— Terminal Mode（internal/TERMINAL-MODE.md §4.8/§13.1）——
+// 桌面壳的终端管理面：全局开关 + 逐设备授权（写配置，daemon config-watch 热生效）、
+// 运行中终端可见性与电脑侧结束。真相在 pty-host 注册目录（磁盘），CLI 无常驻进程
+// 也能读；结束直接连 host 的本机 socket 发 CLOSE，不经 daemon。
+function ptyBaseDir(deps) {
+  return join(dirname(deps.configPath), "pty");
+}
+
+export function terminalStatus(deps) {
+  const config = existsSync(deps.configPath) ? loadOrCreateConfig(deps.configPath) : null;
+  const hosts = listPtyHosts(ptyBaseDir(deps));
+  return {
+    enabled: config?.terminalEnabled === true,
+    hostAvailable: Boolean(resolvePtyHostBin(config?.ptyHostPath)),
+    // 菜单栏「终端 · N」的 N = 存活 host 数；列表含 title/cwd 供点开查看与结束
+    terminals: hosts.map((h) => ({
+      terminalId: h.terminalId,
+      title: h.meta?.title ?? h.terminalId,
+      cwd: h.meta?.cwd ?? "",
+      presetName: h.meta?.presetName ?? "",
+      startedAt: h.startedAt ?? null,
+      alive: h.alive,
+      exit: h.exit ?? null,
+    })),
+    devices: (config?.devices ?? [])
+      .filter((d) => d.role !== "viewer")
+      .map((d) => ({
+        deviceId: d.deviceId,
+        name: d.name || "",
+        terminalAccess: d.terminalAccess === true,
+      })),
+  };
+}
+
+export function terminalEnable(deps, enabled) {
+  const config = loadOrCreateConfig(deps.configPath);
+  config.terminalEnabled = enabled === true;
+  saveConfig(deps.configPath, config);
+  return { ok: true, enabled: config.terminalEnabled };
+}
+
+export function terminalAccess(deps, deviceId, allowed) {
+  const config = loadOrCreateConfig(deps.configPath);
+  const device = (config.devices ?? []).find((d) => d.deviceId === deviceId && d.role !== "viewer");
+  if (!device) return { ok: false, error: "设备不存在" };
+  device.terminalAccess = allowed === true;
+  saveConfig(deps.configPath, config);
+  return { ok: true, deviceId, terminalAccess: device.terminalAccess };
+}
+
+// 电脑侧结束一个终端（§4.8 信任对称）：直连该 host 的 socket 发 CLOSE
+//（host 自会 SIGTERM→SIGKILL 子进程并自灭）。host 已死则只清注册目录残骸。
+export async function terminalClose(deps, terminalId) {
+  if (!/^[\w.-]+$/.test(String(terminalId ?? ""))) return { ok: false, error: "terminalId 非法" };
+  const host = listPtyHosts(ptyBaseDir(deps)).find((h) => h.terminalId === terminalId);
+  if (!host) return { ok: false, error: "终端不存在" };
+  if (!host.alive) return { ok: true, alreadyExited: true };
+  try {
+    const { client } = await reattachPtyHost({ dir: host.dir, sinceSeq: Number.MAX_SAFE_INTEGER, timeoutMs: 3000 });
+    client.close();
+    await new Promise((r) => setTimeout(r, 300)); // 给 CLOSE 帧冲刷的时间
+    client.disconnect();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
 // —— CLI 分发 —— enable/disable 走平台钩子（mac/win/linux-agent），其余纯 config 逻辑。
 export async function runMenuCommand(command, rest, deps) {
   switch (command) {
@@ -229,6 +298,10 @@ export async function runMenuCommand(command, rest, deps) {
     case "notify-test": return notifyTest(deps, rest[0] ? JSON.parse(readFileSync(rest[0], "utf8")) : undefined);
     case "notify-test-index": return notifyTestIndex(deps, Number(rest[0]));
     case "check-update": return checkUpdate(deps);
+    case "terminal-status": return terminalStatus(deps);
+    case "terminal-enable": return terminalEnable(deps, rest[0] !== "0" && rest[0] !== "false");
+    case "terminal-access": return terminalAccess(deps, rest[0], rest[1] !== "0" && rest[1] !== "false");
+    case "terminal-close": return terminalClose(deps, rest[0]);
     default: return null; // not a menu command
   }
 }
@@ -237,4 +310,5 @@ export const MENU_COMMANDS = new Set([
   "status", "enable", "disable", "pair", "pair-once", "devices",
   "revoke", "prune-unused", "notify-list", "notify-add", "notify-remove", "notify-test", "notify-test-index",
   "check-update",
+  "terminal-status", "terminal-enable", "terminal-access", "terminal-close",
 ]);

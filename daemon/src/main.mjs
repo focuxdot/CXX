@@ -36,9 +36,11 @@ import { makeDeps as makeMacAgentDeps } from "./mac-agent.mjs";
 import { makeDeps as makeWinAgentDeps } from "./win-agent.mjs";
 import { makeDeps as makeLinuxAgentDeps } from "./linux-agent.mjs";
 import { PowerManager } from "./power.mjs";
+import { resolvePtyHostBin } from "./pty-adapter.mjs";
 import { RelayLink } from "./relay-link.mjs";
 import { RtcLink } from "./rtc-link.mjs";
 import { SessionHub } from "./session-hub.mjs";
+import { TerminalManager } from "./terminal-manager.mjs";
 import { cxxVersion } from "./version.mjs";
 import { resolve as resolvePath, sep as pathSep } from "node:path";
 
@@ -324,6 +326,49 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
     },
   };
 
+  // —— Terminal Mode（internal/TERMINAL-MODE.md）——
+  // pty-host 二进制可用才实例化；terminalEnabled 默认 false，能力声明在
+  // client-session #daemonCaps 里再按开关判。restore() 恢复 daemon 重启前的存活终端
+  // （host 是独立进程，更新/重启不杀终端——连续性支柱）。
+  const ptyHostBin = resolvePtyHostBin(config.ptyHostPath);
+  if (ptyHostBin) {
+    const terminals = new TerminalManager({
+      hostBin: ptyHostBin,
+      baseDir: join(dirname(configPath), "pty"),
+      log,
+      isCwdAllowed: (cwd) => daemonContext.isCwdAllowed(cwd),
+      // 通知闭环（§12）：bell/退出/静默超时 → webhook。只发终端标题与事件类型，
+      // 不含命令、cwd、输出正文；深链 t=<terminalId> 直达终端页。全部事件仅在
+      // 无客户端在线时推送（有人在看就别打扰；自发起 close 在 manager 层已抑制）。
+      onEvent(type, info) {
+        if (notifier.count === 0) return;
+        const online = [...sessions.values()].filter((s) => s.deviceId && !s.isViewer).length;
+        if (online > 0) return;
+        const link = daemonContext.config.webUrl
+          ? `${daemonContext.config.webUrl.replace(/\/*$/, "/")}#t=${encodeURIComponent(info.terminalId)}`
+          : undefined;
+        if (type === "bell") {
+          notifier.send("终端响铃", `「${info.title}」需要你的注意`, link);
+        } else if (type === "exited") {
+          const how = info.exitCode === 0 ? "正常结束" : `异常退出（${info.exitCode ?? info.exitSignal ?? "未知"}）`;
+          notifier.send("终端已退出", `「${info.title}」${how}`, link);
+        } else if (type === "silence") {
+          notifier.send("终端可能在等你", `「${info.title}」已 ${Math.max(1, Math.round(info.silentForMs / 60_000))} 分钟无输出`, link);
+        }
+      },
+      // 列表变化广播：pushTerminal 内部按设备授权过滤，未授权连接静默丢帧
+      broadcast(method, params) {
+        for (const s of sessions.values()) s.pushTerminal?.(method, params);
+      },
+    });
+    daemonContext.terminals = terminals;
+    terminals.restore().then(() => {
+      const n = terminals.list().length;
+      if (n > 0) log(`Terminal Mode：恢复 ${n} 个终端会话`);
+    }).catch((err) => log(`Terminal Mode 恢复失败: ${err.message}`));
+    log(`Terminal Mode 可用（host: ${ptyHostBin}${config.terminalEnabled === true ? "" : "，全局开关未开启"}）`);
+  }
+
   // 局域网直连（WebRTC DataChannel，见 PROTOCOL.md §3.9）：与 relay 平级的第二条客户端
   // 来源。信令经已鉴权的中继连接转入（client-session 的 rtc.offer），通道打开后按 rtc-N
   // cid 建 ClientSession——信封/鉴权/方法路由与中继连接完全同一套代码。默认开启，
@@ -512,6 +557,8 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
       for (const backend of Object.values(backends)) backend.stop();
       for (const session of sessions.values()) session.dispose();
       sessions.clear();
+      // 只断开 host 连接不结束终端：终端存活是特性（daemon 更新重启后 restore 恢复）
+      daemonContext.terminals?.stop();
       power.release();
       releaseDaemonLock(daemonLock);
     },

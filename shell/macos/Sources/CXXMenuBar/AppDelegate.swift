@@ -138,6 +138,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             add(menu, L("扫码配对…", "Pair a device…"), #selector(doPair))
             add(menu, L("已配对设备…", "Devices…"), #selector(doDevices))
             add(menu, L("通知设置…", "Notifications…"), #selector(doNotify))
+            // 终端模式（信任对称，§4.8）：手机发起的终端在电脑上必须可见。
+            // 有存活终端时菜单项直接带数字，点开即设置窗（含逐项「结束」）。
+            let termCount = liveTerminalCount()
+            add(menu,
+                termCount > 0 ? L("终端 · \(termCount)…", "Terminals · \(termCount)…")
+                              : L("终端模式…", "Terminal Mode…"),
+                #selector(doTerminal))
             menu.addItem(.separator())
             add(menu, L("停用远程", "Disable remote"), #selector(doDisable))
         } else {
@@ -194,7 +201,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func doNotify() { showNotify() }
 
+    @objc func doTerminal() { showTerminalSettings() }
+
+    // 菜单栏「终端 · N」的 N：存活 pty-host 数（backend 读注册目录，daemon 无需在跑）
+    private func liveTerminalCount() -> Int {
+        let terminals = backend(["terminal-status"])["terminals"] as? [[String: Any]] ?? []
+        return terminals.filter { ($0["alive"] as? Bool) == true }.count
+    }
+
     @objc func doDisable() {
+        // 仍有终端在跑时必须提示（§4.6）：终端由独立 host 进程持有，停用远程不会结束
+        // 它们——不提示的话用户会以为“停用=干净关闭”，实际留下仍在消耗资源的 Agent。
+        let terminals = backend(["terminal-status"])["terminals"] as? [[String: Any]] ?? []
+        let live = terminals.filter { ($0["alive"] as? Bool) == true }
+        if !live.isEmpty {
+            let a = NSAlert()
+            a.messageText = L("仍有 \(live.count) 个终端在运行", "\(live.count) terminal(s) still running")
+            a.informativeText = L("停用远程不会结束这些终端里的程序。保留后台运行，还是全部结束？",
+                                  "Disabling remote won't stop the programs in these terminals. Keep them running, or end them all?")
+            a.addButton(withTitle: L("保留后台运行", "Keep running"))
+            a.addButton(withTitle: L("全部结束", "End all"))
+            a.addButton(withTitle: L("取消", "Cancel"))
+            NSApp.activate(ignoringOtherApps: true)
+            switch a.runModal() {
+            case .alertSecondButtonReturn:
+                for t in live {
+                    if let id = t["terminalId"] as? String { backend(["terminal-close", id]) }
+                }
+            case .alertThirdButtonReturn:
+                return
+            default:
+                break // 保留后台运行
+            }
+        }
         backend(["disable"])
         refreshIcon(status())
     }

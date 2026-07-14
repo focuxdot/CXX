@@ -2,7 +2,7 @@
 // 仅缓存静态壳（HTML/manifest/图标），让"添加到主屏幕"离线也能打开界面。
 // 绝不缓存动态数据——会话内容走 WebSocket（不经 SW），故无需担心陈旧数据。
 // 更新策略：导航请求 network-first（始终尝试拿最新 index.html），离线回退缓存。
-const CACHE = "czr-shell-v6"; // v6：后台 watch 租约与长期隐藏页停流
+const CACHE = "czr-shell-v7"; // v7：Terminal Mode（xterm vendor 资源入壳缓存）
 const SHELL = [
   "./",
   "./index.html",
@@ -11,11 +11,17 @@ const SHELL = [
   "./icons/icon-512.png",
   "./icons/apple-touch-icon.png",
   "./icons/menubar.png",
+  "./vendor/xterm/xterm.js",
+  "./vendor/xterm/xterm.css",
+  "./vendor/xterm/addon-fit.js",
+  "./vendor/xterm/addon-unicode11.js",
 ];
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}));
+  // 不 .catch 吞掉失败：precache 失败就让 install 失败、旧 SW/缓存留活——否则一次
+  // 抖动的抓取会让 activate 删掉可用的旧壳、换成空的新缓存，PWA 离线冷启动白屏。
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
 });
 
 self.addEventListener("activate", (event) => {

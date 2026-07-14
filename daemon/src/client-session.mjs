@@ -255,6 +255,15 @@ export class ClientSession {
   static #OUTBOX_MAX_FRAMES = 200;
   static #OUTBOX_MAX_CHARS = 2 * 1024 * 1024;
   static #SEND_HIGH_WATER = 1 << 20; // relay WebSocket bufferedAmount 高水位
+  // 终端输出（LOW 类，internal/TERMINAL-MODE.md §11）：水位显著低于 1MiB——低优先级
+  // 帧一旦进入 socket 缓冲，高优先级帧在缓冲层仍会排队，水位越低队头阻塞越短。
+  // 溢出语义是 resyncRequired（客户端重新 attach 拿快照），不是静默缺行。
+  #termOutbox = []; // [{ message, size, terminalId }]
+  #termChars = 0;
+  #termDrainTimer = null;
+  static #TERM_OUTBOX_MAX_FRAMES = 100;
+  static #TERM_OUTBOX_MAX_CHARS = 512 * 1024;
+  static #TERM_HIGH_WATER = 128 * 1024;
 
   constructor(cid, daemon, { send, close, getBufferedAmount }) {
     this.#cid = cid;
@@ -1013,7 +1022,148 @@ export class ClientSession {
         return;
       }
       default:
+        if (typeof message.method === "string" && message.method.startsWith("terminal.")) {
+          await this.#terminal(message);
+          return;
+        }
         this.#reply(message.id, null, { code: 400, message: `未知方法: ${message.method}` });
+    }
+  }
+
+  // —— Terminal Mode（internal/TERMINAL-MODE.md §9）——
+  // 每个请求都过完整权限链：terminalEnabled AND device.terminalAccess AND 非 viewer
+  // AND 设备未过期（viewer 已被上方 VIEWER_METHODS 白名单挡住，这里是纵深防御）。
+  // 配置以 #daemon.config 当前值为准——config-watch 热更新后撤权立即生效。
+  #terminalAccess() {
+    if (!this.#device || this.isViewer) return false;
+    const cfg = this.#daemon.config;
+    if (cfg.terminalEnabled !== true) return false;
+    const dev = (cfg.devices ?? []).find((d) => d.deviceId === this.deviceId);
+    return Boolean(dev && dev.terminalAccess === true && !isDeviceExpired(dev));
+  }
+
+  async #terminal(message) {
+    const tm = this.#daemon.terminals;
+    if (!tm?.available) {
+      this.#reply(message.id, null, { code: 501, message: "终端模式不可用" });
+      return;
+    }
+    if (!this.#terminalAccess()) {
+      this.#reply(message.id, null, { code: 403, message: "该设备未获终端授权" });
+      return;
+    }
+    const p = message.params ?? {};
+    try {
+      switch (message.method) {
+        case "terminal.presets":
+          this.#reply(message.id, { presets: await tm.presets(), recentCwds: tm.recentCwds() });
+          return;
+        case "terminal.list":
+          this.#reply(message.id, { terminals: tm.list() });
+          return;
+        case "terminal.create": {
+          // executable 只能由 daemon 端 preset 解析；cwd 过 isCwdAllowed（manager 内校验）
+          const view = await tm.create({
+            presetId: p.presetId,
+            cwd: p.cwd,
+            cols: p.cols,
+            rows: p.rows,
+            deviceId: this.deviceId,
+            deviceName: this.#device.name ?? "",
+          });
+          this.#reply(message.id, view);
+          return;
+        }
+        case "terminal.attach":
+          this.#reply(message.id, tm.attach(this, {
+            terminalId: p.terminalId,
+            generation: p.generation,
+            haveSeq: p.haveSeq,
+            cols: p.cols,
+            rows: p.rows,
+            deviceId: this.deviceId,
+          }));
+          return;
+        case "terminal.detach":
+          tm.detach(this, p.terminalId);
+          this.#reply(message.id, { ok: true });
+          return;
+        case "terminal.input":
+          this.#reply(message.id, tm.input(p.terminalId, this.deviceId, {
+            data: p.data,
+            text: p.text,
+            submit: p.submit === true,
+          }));
+          return;
+        case "terminal.resize":
+          this.#reply(message.id, tm.resize(p.terminalId, this.deviceId, p.cols, p.rows));
+          return;
+        case "terminal.signal":
+          this.#reply(message.id, tm.signal(p.terminalId, this.deviceId, p.kind));
+          return;
+        case "terminal.takeover":
+          this.#reply(message.id, tm.takeover(p.terminalId, this.deviceId, this.#device.name ?? ""));
+          return;
+        case "terminal.close":
+          this.#reply(message.id, tm.close(p.terminalId, this.deviceId));
+          return;
+        default:
+          this.#reply(message.id, null, { code: 400, message: `未知方法: ${message.method}` });
+      }
+    } catch (err) {
+      this.#reply(message.id, null, { code: Number.isInteger(err.code) ? err.code : 500, message: err.message });
+    }
+  }
+
+  // TerminalManager 推送入口（sink 接口）。低优先级帧（output/snapshot 大块）走终端
+  // 专用 LOW 队列；控制类（exited/controlChanged/resyncRequired/listChanged）直发。
+  // 每帧都重查授权：撤权后的既有 watcher 立即停流（manager 不感知设备表）。
+  pushTerminal(method, params, { low = false } = {}) {
+    if (this.#disposed || !this.#terminalAccess()) return;
+    if (low) {
+      this.#termEnqueue(method, params);
+      return;
+    }
+    this.#sendMessage({ method, params });
+  }
+
+  #termEnqueue(method, params) {
+    const message = { method, params };
+    const size = JSON.stringify(message).length;
+    this.#termOutbox.push({ message, size, terminalId: params.terminalId });
+    this.#termChars += size;
+    if (
+      this.#termOutbox.length > ClientSession.#TERM_OUTBOX_MAX_FRAMES ||
+      this.#termChars > ClientSession.#TERM_OUTBOX_MAX_CHARS
+    ) {
+      // 溢出：整段丢弃该队列（可丢增量），逐终端通知 resync——恢复语义是重新
+      // attach 拿快照，绝不静默缺行
+      const ids = new Set();
+      for (const f of this.#termOutbox) if (f.terminalId) ids.add(f.terminalId);
+      this.#termOutbox.length = 0;
+      this.#termChars = 0;
+      for (const terminalId of ids) {
+        this.#sendMessage({ method: "terminal.resyncRequired", params: { terminalId } });
+      }
+      return;
+    }
+    this.#drainTermOutbox();
+  }
+
+  #drainTermOutbox() {
+    if (this.#termDrainTimer) return;
+    while (this.#termOutbox.length > 0) {
+      if (this.#getBuffered() >= ClientSession.#TERM_HIGH_WATER) {
+        this.#termDrainTimer = setTimeout(() => {
+          this.#termDrainTimer = null;
+          this.#drainTermOutbox();
+        }, 30);
+        this.#termDrainTimer.unref?.();
+        return;
+      }
+      const { message, size } = this.#termOutbox.shift();
+      this.#termChars -= size;
+      this.#send(this.#seal(message));
     }
   }
 
@@ -1022,6 +1172,11 @@ export class ClientSession {
   #daemonCaps() {
     const caps = { img: 1, wl: 1 };
     if (this.#daemon.rtc) caps.rtc = 1;
+    // 协议能力声明（§9.1）：全局开关开 且 pty-host 可用才广播；不代表本设备已授权
+    // （授权在每个 terminal.* 请求里另查）。开关关闭时手机端保持零线索（§4.1）。
+    if (this.#daemon.terminals?.available && this.#daemon.config.terminalEnabled === true) {
+      caps.terminal = 1;
+    }
     return caps;
   }
 
@@ -1600,6 +1755,13 @@ export class ClientSession {
     }
     this.#outbox.length = 0;
     this.#outboxChars = 0;
+    if (this.#termDrainTimer) {
+      clearTimeout(this.#termDrainTimer);
+      this.#termDrainTimer = null;
+    }
+    this.#termOutbox.length = 0;
+    this.#termChars = 0;
+    this.#daemon.terminals?.detachAll(this); // 断线不结束 PTY，只退订观察
     this.#removeAllHubs();
   }
 }
