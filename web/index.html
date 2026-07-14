@@ -10002,21 +10002,24 @@ async function main() {
   $("termpdel").onclick = async () => { if (presetDraftIndex >= 0 && await deleteTermPreset(presetDraftIndex)) closePresetEditor(); };
   $("termpresetsheet").onclick = (e) => { if (e.target === $("termpresetsheet")) closePresetEditor(); };
   $("termkeystoggle").onclick = () => setTermKeysOpen(!document.body.classList.contains("termkeysopen"));
-  // 终端触摸：手指拖动 → 直接驱动 xterm 回滚区滚动（screen 覆盖 viewport，原生触摸滚不到，手动转发
-  // 到 .xterm-viewport.scrollTop，xterm 监听其 scroll 重绘）；几乎没移动的轻点 → 聚焦唤起软键盘。
+  // 终端触摸：手指拖动 → 用 xterm 官方 scrollLines() 滚回滚区（screen 覆盖 viewport，原生触摸滚不到；
+  // 直接改 viewport.scrollTop xterm 不认，故走 API）。按像素累计换算成行；几乎没移动的轻点 → 聚焦唤起软键盘。
+  // 注意：grok/vim 等全屏 TUI 用备用屏缓冲，本身没有回滚，滚动无效属正常（用其自身方向键翻页）。
   {
     const scr = $("termscreen");
-    let tY = null, tX = null, moved = false;
+    let tY = null, tX = null, moved = false, accum = 0;
     scr.addEventListener("touchstart", (e) => {
-      const t = e.touches[0]; tY = t.clientY; tX = t.clientX; moved = false;
+      const t = e.touches[0]; tY = t.clientY; tX = t.clientX; moved = false; accum = 0;
     }, { passive: true });
     scr.addEventListener("touchmove", (e) => {
-      if (tY == null) return;
-      const t = e.touches[0];
+      if (tY == null || !app.term) return;
+      const t = e.touches[0], xt = app.term.xt;
       if (Math.abs(t.clientY - tY) > 6 || Math.abs(t.clientX - tX) > 6) moved = true;
-      const vp = app.term?.xt.element?.querySelector(".xterm-viewport");
-      if (vp) vp.scrollTop += (tY - t.clientY); // 内容跟手：下拉看更早、上推看更新
+      const rowH = Math.max(8, scr.clientHeight / (xt.rows || 24));
+      accum += t.clientY - tY; // 手指下移为正
       tY = t.clientY; tX = t.clientX;
+      const lines = Math.trunc(accum / rowH);
+      if (lines !== 0) { xt.scrollLines(-lines); accum -= lines * rowH; } // 下移→看更早（上滚）
     }, { passive: true });
     scr.addEventListener("touchend", () => {
       if (!moved && app.term) { try { app.term.xt.focus(); } catch {} } // 轻点聚焦
