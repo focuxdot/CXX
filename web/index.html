@@ -846,20 +846,11 @@ try {
   #shareqr { display: block; margin: 12px auto 4px; background: #fff; padding: 10px; border-radius: 10px; }
 
   /* —— Terminal Mode（internal/TERMINAL-MODE.md §4/§14）—— */
-  /* 首页「会话 / 终端」二段切换：仅 daemon 声明 terminal 能力时显示 */
-  #modeseg { display: none; gap: 0; max-width: 300px; margin: 10px auto 2px;
-             background: var(--sunken); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
-  body.hasterm:not(.insession):not(.interminal) #modeseg { display: flex; }
-  #modeseg button { flex: 1; border: none; background: none; color: var(--dim); font: inherit;
-                    font-size: 14px; padding: 6px 0; border-radius: 8px; cursor: pointer; }
-  #modeseg button.on { background: var(--raised); color: var(--text); font-weight: 600;
-                       box-shadow: 0 1px 3px rgba(0,0,0,.25); }
-  /* 终端列表（termtab 时替换会话列表） */
+  /* 终端作为 agent 选择器的第三项（无独立切换条）；列表在 termtab 时替换会话列表 */
   #termlist { display: none; max-width: 760px; margin: 0 auto; padding: 8px 12px 96px; }
   body.hasterm.termtab:not(.insession):not(.interminal) #termlist { display: block; }
   body.termtab #list { display: none; }
   body.termtab #homebar { display: none !important; }
-  body.termtab #agentpick { visibility: hidden; }
   .termrow { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
              background: var(--raised); border: 1px solid var(--border); border-radius: 12px;
              padding: 12px 14px; margin-bottom: 8px; cursor: pointer; color: var(--text); font: inherit; }
@@ -1100,7 +1091,6 @@ try {
 <div id="toast"></div>
 <main>
   <div id="banner" class="banner"></div>
-  <div id="modeseg"><button id="modechat" class="on" data-i18n="term.mode_chat">会话</button><button id="modeterm" data-i18n="term.mode_term">终端</button></div>
   <div id="termlist"></div>
   <div id="termpage">
     <div id="termnotice"></div>
@@ -5192,27 +5182,30 @@ function renderAgentPick() {
   const box = $("agentpick");
   if (!box) return;
   const list = app.agents || [];
-  if (app.view !== "list" || app.isViewer || list.length < 2) {
+  const hasTerm = termCapable();
+  const termMode = hasTerm && app.homeTab === "term";
+  // 可选项 = 后端 agent + 终端（若可用）。少于 2 个无从切换、不展示。
+  const optionCount = list.length + (hasTerm ? 1 : 0);
+  if (app.view !== "list" || app.isViewer || optionCount < 2) {
     box.style.display = "none";
     box.classList.remove("open");
     box.innerHTML = "";
     return;
-  } // 只有一个后端或不在首页：无从切换/不展示
+  }
   box.style.display = "flex";
   box.classList.remove("open");
   box.innerHTML = "";
-  const current = agentLabel(app.agent);
   const trigger = document.createElement("button");
   trigger.type = "button";
   trigger.className = "agentbtn";
   trigger.setAttribute("aria-haspopup", "menu");
   trigger.setAttribute("aria-expanded", "false");
   const triggerText = document.createElement("span");
-  triggerText.textContent = current;
+  triggerText.textContent = termMode ? t("term.mode_term") : agentLabel(app.agent);
   const triggerChev = document.createElement("span");
   triggerChev.className = "agentchev";
   triggerChev.textContent = "▾";
-  trigger.append(agentIconNode(app.agent), triggerText, triggerChev);
+  trigger.append(termMode ? terminalIconNode() : agentIconNode(app.agent), triggerText, triggerChev);
   trigger.onclick = (e) => {
     e.stopPropagation();
     const open = !box.classList.contains("open");
@@ -5223,9 +5216,7 @@ function renderAgentPick() {
   const menu = document.createElement("div");
   menu.className = "agentmenu";
   menu.setAttribute("role", "menu");
-  for (const a of list) {
-    const id = a.id || a.agent;
-    const on = id === app.agent;
+  const addOpt = (icon, label, on, warn, onClick) => {
     const opt = document.createElement("button");
     opt.type = "button";
     opt.className = `agentopt${on ? " active" : ""}`;
@@ -5233,13 +5224,13 @@ function renderAgentPick() {
     opt.setAttribute("aria-checked", on ? "true" : "false");
     const name = document.createElement("span");
     name.className = "agentname";
-    name.textContent = agentLabel(id);
-    opt.append(agentIconNode(id), name);
-    if (a.healthy === false) {
-      const warn = document.createElement("span");
-      warn.className = "agentwarn";
-      warn.textContent = "!";
-      opt.appendChild(warn);
+    name.textContent = label;
+    opt.append(icon, name);
+    if (warn) {
+      const w = document.createElement("span");
+      w.className = "agentwarn";
+      w.textContent = "!";
+      opt.appendChild(w);
     }
     const ck = document.createElement("span");
     ck.className = "agentck";
@@ -5248,11 +5239,32 @@ function renderAgentPick() {
     opt.onclick = (e) => {
       e.stopPropagation();
       box.classList.remove("open");
-      switchAgent(id);
+      onClick();
     };
     menu.appendChild(opt);
+  };
+  // 后端 agent（终端模式下均不勾选——当前视图是终端）
+  for (const a of list) {
+    const id = a.id || a.agent;
+    addOpt(agentIconNode(id), agentLabel(id), !termMode && id === app.agent, a.healthy === false, () => {
+      if (termMode) setHomeTab("chat");
+      switchAgent(id);
+    });
+  }
+  // 第三项：终端（与两个 agent 同级）
+  if (hasTerm) {
+    addOpt(terminalIconNode(), t("term.mode_term"), termMode, false, () => {
+      if (app.homeTab !== "term") setHomeTab("term");
+    });
   }
   box.append(trigger, menu);
+}
+
+function terminalIconNode() {
+  const ico = document.createElement("span");
+  ico.className = "agentico";
+  ico.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`;
+  return ico;
 }
 
 async function switchAgent(id) {
@@ -8878,15 +8890,15 @@ function termCapable() {
   return !app.isViewer && app.session?.serverCaps?.terminal === 1;
 }
 
-// 首页「会话 / 终端」二段切换：能力驱动显隐 + 记忆（§4.1）
+// 终端作为 agent 选择器里的第三项（与 ChatGPT/Claude 同级，§4.1）：能力驱动 + 记忆。
+// 不再是独立二段条——切换入口统一在左上角下拉，由 renderAgentPick 呈现。
 function updateHomeTab() {
   const has = termCapable();
   document.body.classList.toggle("hasterm", has);
   if (!has && app.homeTab === "term") app.homeTab = "chat"; // 换绑到不支持的电脑：回落会话模式
   const term = has && app.homeTab === "term";
   document.body.classList.toggle("termtab", term);
-  $("modechat").classList.toggle("on", !term);
-  $("modeterm").classList.toggle("on", term);
+  renderAgentPick();
   if (term) refreshTerminals().catch(() => {});
 }
 
@@ -9765,8 +9777,6 @@ async function main() {
     }
   };
   // —— Terminal Mode 绑定 ——
-  $("modechat").onclick = () => setHomeTab("chat");
-  $("modeterm").onclick = () => setHomeTab("term");
   $("newterm").onclick = openTermSheet;
   $("termstart").onclick = startTerminal;
   $("termsheet").onclick = (e) => { if (e.target === $("termsheet")) $("termsheet").classList.remove("open"); };
