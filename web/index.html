@@ -885,11 +885,10 @@ try {
   body.interminal main { padding: 0 !important; max-width: none; }
   body.interminal #list, body.interminal #termlist { display: none !important; }
   /* 终端画布铺满：header 之下直到底部；软键盘弹起时用 --termkbdgap 缩短到键盘上沿 */
+  /* touch-action:none —— 手势归 JS：手指拖动转发到 xterm 回滚区（screen 盖住 viewport，原生滚不到） */
   #termscreen { height: calc(100dvh - 53px - var(--termkbdgap, 0px) - env(safe-area-inset-bottom)); background: #0c0e11;
-                padding: 0; }
+                padding: 0; touch-action: none; }
   #termscreen .xterm { height: 100%; }
-  /* 触摸滚动落在 xterm 回滚区、不外溢到整页；纵向 pan 交给它 */
-  #termscreen .xterm-viewport { touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
   #termnotice { display: none; position: sticky; top: 53px; z-index: 10; font-size: 13px;
                 padding: 8px 12px; background: var(--warn-bg, rgba(180,140,40,.15)); color: var(--text); }
   #termnotice.show { display: flex; align-items: center; gap: 10px; }
@@ -3899,6 +3898,7 @@ const app = {
   histTotal: 0,            // 该会话 rollout 总条数（daemon 随快照下发；> histLimit 即"上面还有更早"）
   loadingEarlier: false,   // 正在加载更早历史（snapshot 回来时改为锚定滚动，不落底）
   earlierAnchor: null,     // 加载前滚动位置 {scrollY}，加载完成后恢复，避免跳到最新消息
+  homeScrollY: 0,          // 离开首页进会话前的 window 滚动位；closeSession 返回时复原，避免首页跳动
   approvals: new Map(),    // approvalKey -> 请求参数（全局待审批注册表）
   echoes: [],              // 乐观渲染的用户气泡 {text, imgs, el}，等 tail 确认后移除
   suppressUserImages: 0,   // 带图文字 echo 被文本确认后，吞掉随后单独到达的用户图片块
@@ -5733,6 +5733,9 @@ async function openSession(id, title, opts = {}) {
     const url = opts.draft ? `${location.pathname}${location.search}` : "#s=" + encodeURIComponent(id);
     history.pushState({ czr: "session" }, "", url);
   }
+  // 会话与首页共用 window 滚动：进会话会 scrollToBottom 把窗口滚到底，返回时若不复位，
+  // 首页会停在被滚动过的位置（看起来"跳动/变了"）。记下离开首页时的滚动位，closeSession 复原。
+  if (app.view === "list") app.homeScrollY = window.scrollY;
   app.view = "session";
   app.currentId = id;
   app.currentTitle = title;
@@ -5871,6 +5874,9 @@ async function closeSession() {
   renderQuickCommandBar();
   $("log").innerHTML = "";
   $("list").classList.remove("hidden");
+  // 复原进会话前的首页滚动位（会话 scrollToBottom 动过共用的 window 滚动）：先就地复位，
+  // 让当前列表 DOM 立刻回到原位；refreshList 重渲染后再复位一次，抵消 innerHTML 重建的抖动。
+  window.scrollTo(0, app.homeScrollY || 0);
   $("back").style.display = "none";
   $("sharebtn").style.display = "";
   setTitle(t("brand"));
@@ -5881,6 +5887,8 @@ async function closeSession() {
   // 就算失败也已离开会话；迟到的 live 事件因 currentId 已清空会被忽略。
   app.session.request("session.unwatch").catch(() => {});
   await refreshList().catch(() => {});
+  // 列表重建后内容高度可能变，再复位一次滚动位，确保首页稳稳停在离开前的位置
+  window.scrollTo(0, app.homeScrollY || 0);
 }
 
 // 运行状态区分驱动方：daemon（手机发起，可停止）/ desktop（桌面 GUI 在跑，只可看，
@@ -9325,8 +9333,6 @@ async function openTerminal(terminalId, opts = {}) {
     if (!app.term) return;
     termSendRaw(applyLatch(d));
   });
-  // 点终端即聚焦，唤起软键盘直接打字（非 owner 由 termSendRaw 弹接管）
-  $("termscreen").onpointerup = () => { try { app.term?.xt.focus(); } catch {} };
   renderTermKeys();
   fitTerm({ send: false });
   await attachTerminal();
@@ -9942,6 +9948,27 @@ async function main() {
   $("termpdel").onclick = async () => { if (presetDraftIndex >= 0 && await deleteTermPreset(presetDraftIndex)) closePresetEditor(); };
   $("termpresetsheet").onclick = (e) => { if (e.target === $("termpresetsheet")) closePresetEditor(); };
   $("termkeystoggle").onclick = () => setTermKeysOpen(!document.body.classList.contains("termkeysopen"));
+  // 终端触摸：手指拖动 → 直接驱动 xterm 回滚区滚动（screen 覆盖 viewport，原生触摸滚不到，手动转发
+  // 到 .xterm-viewport.scrollTop，xterm 监听其 scroll 重绘）；几乎没移动的轻点 → 聚焦唤起软键盘。
+  {
+    const scr = $("termscreen");
+    let tY = null, tX = null, moved = false;
+    scr.addEventListener("touchstart", (e) => {
+      const t = e.touches[0]; tY = t.clientY; tX = t.clientX; moved = false;
+    }, { passive: true });
+    scr.addEventListener("touchmove", (e) => {
+      if (tY == null) return;
+      const t = e.touches[0];
+      if (Math.abs(t.clientY - tY) > 6 || Math.abs(t.clientX - tX) > 6) moved = true;
+      const vp = app.term?.xt.element?.querySelector(".xterm-viewport");
+      if (vp) vp.scrollTop += (tY - t.clientY); // 内容跟手：下拉看更早、上推看更新
+      tY = t.clientY; tX = t.clientX;
+    }, { passive: true });
+    scr.addEventListener("touchend", () => {
+      if (!moved && app.term) { try { app.term.xt.focus(); } catch {} } // 轻点聚焦
+      tY = null;
+    }, { passive: true });
+  }
   window.addEventListener("resize", () => {
     if (app.view === "terminal") fitTerm({ send: true });
   });
