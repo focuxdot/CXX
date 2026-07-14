@@ -145,7 +145,7 @@ cxx notify --list                               # 查看 / --remove <序号> 删
 ### 终端模式（可选）
 
 结构化会话之外，手机还能接管一个**真正的终端**：左上角 agent 选择器选「终端」→ **新建窗口**，
-即在电脑上开一个终端窗口、从手机操作。启动方式按本机检测自动列出——Claude Code、OpenCode、
+即在电脑上开一个终端窗口、从手机操作。启动方式可选 Claude Code、OpenCode、
 Codex CLI、Gemini CLI，或普通 Shell；画面用 xterm.js 全保真渲染，ANSI / TUI / Vim 都能用，
 并提供指令模式（适配手机输入）与键盘模式（原样击键）两套输入。
 

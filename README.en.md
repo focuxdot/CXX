@@ -145,7 +145,7 @@ cxx notify --list                               # list / --remove <index> to del
 
 ### Terminal Mode (optional)
 
-Beyond structured sessions, your phone can also take over a **real terminal**: pick **Terminal** in the agent selector (top left) → **New Window**, and a terminal window opens on your computer, driven from your phone. Launch presets are auto-detected — Claude Code, OpenCode, Codex CLI, Gemini CLI, or a plain shell. The screen is rendered with xterm.js at full fidelity (ANSI / TUI / Vim all work), with two input modes: instruction mode (adapted to phone typing) and keyboard mode (raw keystrokes).
+Beyond structured sessions, your phone can also take over a **real terminal**: pick **Terminal** in the agent selector (top left) → **New Window**, and a terminal window opens on your computer, driven from your phone. Launch presets include Claude Code, OpenCode, Codex CLI, Gemini CLI, or a plain shell. The screen is rendered with xterm.js at full fidelity (ANSI / TUI / Vim all work), with two input modes: instruction mode (adapted to phone typing) and keyboard mode (raw keystrokes).
 
 - **Sessions outlive connections**: each terminal window is owned by a standalone `cxx-pty-host` process, so a phone lock-screen, a dropped connection, or even a daemon auto-update restart never kills the task inside; the screen resumes when you come back.
 - **Notification loop**: a terminal bell, process exit, or prolonged silence pushes through the notification channels above, and the deep link lands you in that terminal.
