@@ -9120,23 +9120,27 @@ const TERM_STATE_LABEL = {
 };
 const TERM_ACTIVE_MS = 60000; // 近期有输出才算"运行中"(绿)，久无输出算"空闲"(灰)——交互式 shell/TUI 不退出但常闲置
 
+// 列表只展示"活着"的窗口：创建中 / 运行中 / 空闲 / 正在退出。已退出(EXITED)与
+// 创建失败(FAILED)是死状态——确认结束后行会短暂显示"正在退出"，转入已退出即从列表
+// 消失，不再需要第二次长按移除。（app.terminals 仍保留退出项，供正看着该窗口退出的终端页用；
+// 只在此处渲染时过滤。）
+const TERM_LIVE_STATUS = new Set(["CREATING", "RUNNING", "DETACHED", "STOPPING"]);
+
 function renderTermList() {
   const box = $("termlist");
-  if (!app.terminals.length) {
+  const live = app.terminals.filter((tv) => TERM_LIVE_STATUS.has(tv.status));
+  if (!live.length) {
     box.innerHTML = `<div class="termlocked">${t("term.empty")}</div>`;
     return;
   }
   box.innerHTML = "";
-  const sorted = [...app.terminals].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const sorted = [...live].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   for (const tv of sorted) {
     const row = document.createElement("button");
     row.className = "termrow";
     const running = tv.status === "RUNNING" || tv.status === "DETACHED";
     let label, cls, sub;
-    if (tv.status === "EXITED") {
-      label = t("term.st_exited"); cls = "";
-      sub = `exit ${tv.exitCode ?? tv.exitSignal ?? "?"}`;
-    } else if (running) {
+    if (running) {
       // 活着 ≠ 在忙：近期有输出才绿色"运行中"，久无输出降为中性"空闲"
       const active = tv.lastOutputAt && (Date.now() - tv.lastOutputAt) < TERM_ACTIVE_MS;
       label = active ? t("term.st_running") : t("term.st_idle");
@@ -9155,8 +9159,9 @@ function renderTermList() {
   }
 }
 
-// 列表行手势：轻点进窗口；长按/右键 → 结束窗口（活着的先确认，已退出的直接移除）。
-// 复用 terminal.close（与桌面托盘「结束」同一 RPC：先正常退出、再强制）。
+// 列表行手势：轻点进窗口；长按/右键 → 结束窗口（先弹确认）。列表里只有活着的窗口，
+// 结束后行经"正在退出"再消失，无需二次移除。复用 terminal.close（与桌面托盘「结束」同一
+// RPC：先正常退出、再强制）。
 function setupTermRowActions(row, tv) {
   let pressTimer = null, sx = 0, sy = 0, suppress = 0;
   const clearPress = () => { if (pressTimer) clearTimeout(pressTimer); pressTimer = null; };
