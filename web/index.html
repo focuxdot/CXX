@@ -10035,13 +10035,23 @@ async function main() {
       if (lines !== 0) {
         accum -= lines * rowH;
         if (xt.buffer.active.type === "alternate") {
-          // 全屏 TUI（备用屏，无回滚）：拖动转方向键，跟桌面滚轮一致（xterm 桌面也是 wheel→方向键）。
-          // 需 owner；否则只读设备发不出，静默忽略（不弹接管，避免滑动狂弹）。
+          // 全屏 TUI（备用屏，无本地回滚）：模拟桌面滚轮交给 App 自己滚。需 owner。
           if (app.term.isOwner) {
-            const n = Math.min(Math.abs(lines), 6); // 单次限幅，猛滑不狂发
-            const arrow = lines > 0 ? "A" : "B"; // 手指下移→上箭头（看更早）
-            const seq = (xt.modes?.applicationCursorKeysMode ? "\x1bO" : "\x1b[") + arrow;
-            termSendRaw(seq.repeat(n));
+            const n = Math.min(Math.abs(lines), 4); // 单次限幅，猛滑不狂发
+            const mouseOn = xt.modes?.mouseTrackingMode && xt.modes.mouseTrackingMode !== "none";
+            if (mouseOn) {
+              // grok/claude/codex 等开了鼠标上报：发 SGR 滚轮事件（桌面滚轮也是这条路），App 滚自己的内容。
+              // 之前发方向键会被当成输入行的历史切换——正是这个 bug。
+              const rect = scr.getBoundingClientRect();
+              const col = Math.min(xt.cols, Math.max(1, Math.ceil((t.clientX - rect.left) / (rect.width / xt.cols))));
+              const row = Math.min(xt.rows, Math.max(1, Math.ceil((t.clientY - rect.top) / (rect.height / xt.rows))));
+              const btn = lines > 0 ? 64 : 65; // 64=上滚（看更早） 65=下滚
+              termSendRaw(`\x1b[<${btn};${col};${row}M`.repeat(n));
+            } else {
+              // 无鼠标上报（less/man 等）：转方向键，跟桌面 wheel→方向键一致
+              const arrow = lines > 0 ? "A" : "B";
+              termSendRaw(((xt.modes?.applicationCursorKeysMode ? "\x1bO" : "\x1b[") + arrow).repeat(n));
+            }
           }
         } else {
           xt.scrollLines(-lines); // 普通屏：本地滚回滚区（下移→上滚）
