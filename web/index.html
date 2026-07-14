@@ -366,6 +366,12 @@ try {
   .confirmbtn:active { opacity: .75; }
   .confirmbtn.cancel { background: var(--sunken); }
   .confirmbtn.primary { background: var(--accent); color: #fff; }
+  /* 入场动画：淡入 + 上滑，别再硬闪出来 */
+  #confirmsheet.open { animation: qcfade .18s ease both; }
+  #confirmsheet.open .sheetbox { animation: qcrise .26s cubic-bezier(.22,.61,.36,1) both; }
+  /* 破坏性操作变体：红色主按钮 + 红调图标（结束终端 / 撤销 等） */
+  .confirmicon.danger { background: rgba(217,106,106,.14); color: var(--err); }
+  .confirmbtn.primary.danger { background: var(--err); color: #fff; }
 
   main { padding: 12px 20px 40px; max-width: 760px; margin: 0 auto; }
   .notice { text-align: center; color: var(--dim); padding: 30px 10px; }
@@ -1410,8 +1416,6 @@ const I18N = {
     "dur.minsec": "{0} 分 {1} 秒",
     "strip.watchingN": "{0} 人围观中",
     "strip.awaitingApproval": "ChatGPT 在等你的审批",
-    "strip.desktopRunning": "桌面端正在运行",
-    "strip.codexWorking": "ChatGPT 正在工作…",
     "echo.uploading": "上传图片 {0}/{1}…",
     "banner.offline_newsession": "电脑离线，暂时无法新建会话",
     "banner.offline_archive": "电脑离线，暂时无法归档",
@@ -1805,8 +1809,6 @@ const I18N = {
     "dur.minsec": "{0}m {1}s",
     "strip.watchingN": (n) => `${n} watching`,
     "strip.awaitingApproval": "ChatGPT is waiting for your approval",
-    "strip.desktopRunning": "Running on desktop",
-    "strip.codexWorking": "ChatGPT is working…",
     "echo.uploading": "Uploading image {0}/{1}…",
     "banner.offline_newsession": "Computer offline — can't start a new session right now",
     "banner.offline_archive": "Computer offline — can't archive right now",
@@ -5140,7 +5142,7 @@ function closeConfirmSheet(result = false) {
   if (resolve) resolve(Boolean(result));
 }
 
-function openConfirmSheet({ title, body, okText, icon = ARCHIVE_SVG } = {}) {
+function openConfirmSheet({ title, body, okText, icon = ARCHIVE_SVG, danger = false } = {}) {
   if (confirmSheetResolve) closeConfirmSheet(false);
   confirmSheetFocus = document.activeElement;
   $("confirmtitle").textContent = title || "";
@@ -5148,6 +5150,8 @@ function openConfirmSheet({ title, body, okText, icon = ARCHIVE_SVG } = {}) {
   $("confirmdesc").style.display = body ? "" : "none";
   $("confirmok").textContent = okText || t("common.archive");
   $("confirmicon").innerHTML = icon || "";
+  $("confirmicon").classList.toggle("danger", danger); // 破坏性操作红调
+  $("confirmok").classList.toggle("danger", danger);
   $("confirmsheet").classList.add("open");
   setTimeout(() => {
     try { $("confirmok").focus({ preventScroll: true }); }
@@ -5985,13 +5989,6 @@ function updateStatusStrip() {
     el.textContent = t("strip.awaitingApproval");
   } else if (app.loadingEarlier) {
     el.style.display = "none";
-  } else if (app.running) {
-    el.className = "";
-    el.style.display = "block";
-    el.innerHTML = '<span class="pulse"></span>';
-    const who = app.driver === "desktop" ? t("strip.desktopRunning") : t("strip.codexWorking");
-    el.appendChild(document.createTextNode(
-      `${who} ${fmtDur(Date.now() - app.runStart)}${watching ? ` · ${watching}` : ""}`));
   } else if (watching) {
     el.className = "";
     el.style.display = "block";
@@ -9162,6 +9159,7 @@ function setupTermRowActions(row, tv) {
         body: t("term.close_confirm.body"),
         okText: t("term.close_ok"),
         icon: TRASH_SVG,
+        danger: true,
       });
       if (!ok) return;
     }
