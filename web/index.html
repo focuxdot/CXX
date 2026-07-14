@@ -460,9 +460,10 @@ try {
                       padding: 9px 13px; max-width: 85%; white-space: pre-wrap; word-break: break-word; }
   .msg.pending { opacity: .55; }
   .msg.assistant { word-break: break-word; }
-  .msg.sysnote { display: flex; justify-content: center; }
-  .msg.sysnote .notetext { font-size: 12px; color: var(--dim); background: var(--sunken);
-    border-radius: 10px; padding: 4px 12px; max-width: 90%; word-break: break-word; }
+  /* harness 注入通知（后台任务完成等）：对齐桌面端 Claude Code 的 "● 事件文本" 左对齐行 */
+  .msg.sysnote { display: flex; align-items: baseline; margin: 14px 2px; font-size: 12.5px;
+                 color: var(--dim); word-break: break-word; }
+  .msg.sysnote .pulse { animation: none; opacity: .7; flex: none; }
   .msg-actions { display: flex; align-items: center; gap: 8px; margin: 6px 0 0 0; color: var(--dim); }
   .msg-actions button { width: 28px; height: 28px; border: none; border-radius: 50%;
                         background: none; color: inherit; padding: 0; cursor: pointer;
@@ -7458,7 +7459,7 @@ function claudeInjectedBubble(text) {
   if (!CLAUDE_INJECTED_RE.test(text)) return undefined;
   if (/^<task-notification\b/.test(text)) {
     const summary = text.match(/<summary>([\s\S]*?)<\/summary>/)?.[1]?.trim();
-    return { cls: "sysnote", text: `⚙ ${summary || t("sysnote.tasknotify")}` };
+    return { cls: "sysnote", text: summary || t("sysnote.tasknotify") };
   }
   const cmd = text.match(/<command-name>([\s\S]*?)<\/command-name>/)?.[1]?.trim();
   if (cmd) {
@@ -7563,14 +7564,16 @@ function claudeItemToBubbles(item) {
   return out;
 }
 
-// harness 注入的通知（如后台任务完成）→ 居中一行灰色小字，不冒充用户气泡
+// harness 注入的通知（如后台任务完成）→ "● 事件文本" 左对齐行（对标桌面端 Claude Code），
+// 圆点复用通用状态点（静止态），风格与轮次总结行 .turnsum 一致
 function sysnoteNode(text) {
   const msg = document.createElement("div");
   msg.className = "msg sysnote";
-  const b = document.createElement("div");
-  b.className = "notetext";
-  b.textContent = text;
-  msg.appendChild(b);
+  const dot = document.createElement("span");
+  dot.className = "pulse";
+  const txt = document.createElement("span");
+  txt.textContent = text;
+  msg.append(dot, txt);
   return msg;
 }
 
