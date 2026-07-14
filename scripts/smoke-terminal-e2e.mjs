@@ -106,6 +106,23 @@ async function main() {
   if (presets?.presets?.some((p) => p.id === "shell")) ok("授权热生效：presets 返回（含 Shell）");
   else { fail("授权热生效", JSON.stringify(presets)); throw new Error("无法继续"); }
 
+  // —— 编辑启动方式（savePresets 往返 + 落盘）——
+  const edited = [
+    { id: "shell", name: "Shell", command: "" },
+    { name: "回声", command: "echo hi" }, // 无 id → daemon 补
+  ];
+  const saved = await reply(send("terminal.savePresets", { presets: edited }));
+  const sp = saved.result?.presets;
+  if (Array.isArray(sp) && sp.length === 2 && sp[1].name === "回声" && sp[1].command === "echo hi" && /^p/.test(sp[1].id)) {
+    ok("terminal.savePresets：往返 + 补全 id");
+  } else {
+    fail("terminal.savePresets", JSON.stringify(saved));
+  }
+  // 落盘校验：config.terminalPresets 已写入
+  const onDisk = loadOrCreateConfig(configPath).terminalPresets;
+  if (Array.isArray(onDisk) && onDisk.some((p) => p.command === "echo hi")) ok("savePresets 落盘 daemon.json");
+  else fail("savePresets 落盘", JSON.stringify(onDisk));
+
   // —— 创建 + attach + 快照 ——
   const created = await reply(send("terminal.create", { presetId: "shell", cwd: dir, cols: 80, rows: 24 }));
   const tid = created.result?.terminalId;

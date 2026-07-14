@@ -931,6 +931,22 @@ try {
              font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   #termcwd:focus { outline: none; border-color: var(--accent); }
   .termcwdhint { color: var(--dim); font-size: 12px; padding: 8px 4px 2px; }
+  .termsechdr { display: flex; align-items: center; justify-content: space-between; }
+  .termsechdr .termsec { margin-right: auto; }
+  .termeditbtn { background: none; border: none; color: var(--accent); font: inherit; font-size: 13px;
+                 cursor: pointer; padding: 8px 2px 4px; }
+  .termopt .termdel { margin-left: 8px; font-size: 15px; opacity: .8; flex: 0 0 auto; padding: 2px 4px; }
+  .termopt.editing { cursor: pointer; }
+  .termaddpreset { justify-content: center; color: var(--accent); border-style: dashed; background: transparent; }
+  #termpname, #termpcmd { width: 100%; background: var(--sunken); border: 1px solid var(--border); border-radius: 10px;
+             padding: 10px 12px; color: var(--text); font-size: 14px;
+             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  #termpname:focus, #termpcmd:focus { outline: none; border-color: var(--accent); }
+  .termphint { color: var(--dim); font-size: 12px; padding: 8px 2px 2px; }
+  #termpsave { width: 100%; margin-top: 14px; border: none; border-radius: 12px; padding: 13px;
+               background: var(--text); color: var(--bg); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+  #termpdel { width: 100%; margin-top: 8px; border: 1px solid var(--border); border-radius: 12px; padding: 11px;
+              background: transparent; color: var(--danger, #e5484d); font: inherit; font-size: 14px; cursor: pointer; }
   #termstart { width: 100%; margin-top: 14px; border: none; border-radius: 12px; padding: 13px;
                background: var(--text); color: var(--bg); font: inherit; font-size: 15px;
                font-weight: 600; cursor: pointer; }
@@ -1128,12 +1144,27 @@ try {
 <div id="termsheet" class="sheet">
   <div class="sheetbox">
     <div class="sheethead" data-i18n="term.new">新建窗口</div>
-    <div class="termsec" data-i18n="term.launch">启动方式</div>
+    <div class="termsechdr">
+      <span class="termsec" data-i18n="term.launch">启动方式</span>
+      <button id="termedit" class="termeditbtn" data-i18n="term.edit">编辑</button>
+    </div>
     <div id="termpresets"></div>
     <div class="termsec" data-i18n="term.cwd">工作目录</div>
     <input id="termcwd" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="/path/to/project">
     <div id="termcwds" style="margin-top:6px"></div>
     <button id="termstart" data-i18n="term.start">启动</button>
+  </div>
+</div>
+<div id="termpresetsheet" class="sheet">
+  <div class="sheetbox">
+    <div class="sheethead" id="termpresettitle" data-i18n="term.add_preset">新增启动方式</div>
+    <div class="termsec" data-i18n="term.p_name">名称</div>
+    <input id="termpname" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40" data-i18n-ph="term.p_name_ph" placeholder="如 Claude Code">
+    <div class="termsec" data-i18n="term.p_cmd">命令</div>
+    <input id="termpcmd" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="500" data-i18n-ph="term.p_cmd_ph" placeholder="如 claude --resume">
+    <div class="termphint" data-i18n="term.p_cmd_hint">命令留空 = 普通命令行（登录 shell）</div>
+    <button id="termpsave" data-i18n="term.p_save">保存</button>
+    <button id="termpdel" data-i18n="term.p_del">删除</button>
   </div>
 </div>
 <div id="homebar">
@@ -1554,6 +1585,20 @@ const I18N = {
     "term.mode_term": "终端",
     "term.new": "新建窗口",
     "term.launch": "启动方式",
+    "term.edit": "编辑",
+    "term.done_edit": "完成",
+    "term.add_preset": "新增启动方式",
+    "term.p_name": "名称",
+    "term.p_name_ph": "如 Claude Code",
+    "term.p_cmd": "命令",
+    "term.p_cmd_ph": "如 claude --resume",
+    "term.p_cmd_hint": "命令留空 = 普通命令行（登录 shell）",
+    "term.p_save": "保存",
+    "term.p_del": "删除",
+    "term.p_del_confirm": "删除启动方式「{0}」？",
+    "term.p_name_required": "请填写名称",
+    "term.p_last": "至少保留一个启动方式",
+    "term.presets_save_fail": "保存失败：{0}",
     "term.cwd": "工作目录",
     "term.cwd_none": "没有匹配的目录，可直接在上方输入完整路径",
     "term.cwd_more": "还有 {0} 个，输入项目名可筛选",
@@ -1928,6 +1973,20 @@ const I18N = {
     "term.mode_term": "Terminal",
     "term.new": "New Window",
     "term.launch": "Launch with",
+    "term.edit": "Edit",
+    "term.done_edit": "Done",
+    "term.add_preset": "Add launch option",
+    "term.p_name": "Name",
+    "term.p_name_ph": "e.g. Claude Code",
+    "term.p_cmd": "Command",
+    "term.p_cmd_ph": "e.g. claude --resume",
+    "term.p_cmd_hint": "Leave blank = plain command line (login shell)",
+    "term.p_save": "Save",
+    "term.p_del": "Delete",
+    "term.p_del_confirm": "Delete launch option “{0}”?",
+    "term.p_name_required": "Please enter a name",
+    "term.p_last": "Keep at least one launch option",
+    "term.presets_save_fail": "Save failed: {0}",
     "term.cwd": "Working directory",
     "term.cwd_none": "No matching directory — type a full path above",
     "term.cwd_more": "{0} more — type a project name to filter",
@@ -8990,19 +9049,8 @@ async function openTermSheet(prefill = null) {
   termSheetSel = (prefill?.presetId && presets.some((p) => p.id === prefill.presetId))
     ? prefill.presetId
     : presets[0]?.id ?? "shell";
-  const box = $("termpresets");
-  box.innerHTML = "";
-  for (const p of presets) {
-    const b = document.createElement("button");
-    b.className = "termopt" + (p.id === termSheetSel ? " on" : "");
-    b.textContent = p.name;
-    b.onclick = () => {
-      termSheetSel = p.id;
-      for (const el of box.children) el.classList.remove("on");
-      b.classList.add("on");
-    };
-    box.appendChild(b);
-  }
+  app.termPresetEdit = false; // 每次打开都回到普通（非编辑）态
+  renderTermPresets();
   // 工作目录候选：终端最近用过的目录（daemon MRU）在前，会话项目目录（按活跃度 MRU）在后，
   // 按规范化路径去重、保序。不再截断——项目再多也全量保留，靠输入框实时筛选收敛。
   const cwds = app.termPresets?.recentCwds ?? [];
@@ -9019,6 +9067,99 @@ async function openTermSheet(prefill = null) {
   renderTermCwds(""); // 初始按默认展示，不用预填值筛选
   $("termstart").disabled = false;
   $("termsheet").classList.add("open");
+}
+
+// —— 启动方式列表渲染（含编辑态）——
+// 普通态：点一项即选中；编辑态：每项右侧带 🗑、点整行进编辑器，底部一条「＋ 新增」。
+function renderTermPresets() {
+  const presets = app.termPresets?.presets ?? [];
+  const box = $("termpresets");
+  box.innerHTML = "";
+  const editing = app.termPresetEdit === true;
+  presets.forEach((p, i) => {
+    const b = document.createElement("button");
+    b.className = "termopt" + (!editing && p.id === termSheetSel ? " on" : "") + (editing ? " editing" : "");
+    const label = document.createElement("span");
+    label.textContent = p.name;
+    b.appendChild(label);
+    if (p.command) { // 命令作副标题灰字（空命令=普通 shell，不展示）
+      const sub = document.createElement("span");
+      sub.className = "sub";
+      sub.textContent = p.command;
+      b.appendChild(sub);
+    }
+    if (editing) {
+      const del = document.createElement("span");
+      del.className = "termdel";
+      del.textContent = "🗑";
+      del.onclick = (e) => { e.stopPropagation(); deleteTermPreset(i); };
+      b.appendChild(del);
+      b.onclick = () => openPresetEditor(i);
+    } else {
+      b.onclick = () => { termSheetSel = p.id; renderTermPresets(); };
+    }
+    box.appendChild(b);
+  });
+  if (editing) {
+    const add = document.createElement("button");
+    add.className = "termopt termaddpreset";
+    add.textContent = t("term.add_preset");
+    add.onclick = () => openPresetEditor(-1);
+    box.appendChild(add);
+  }
+  $("termedit").textContent = editing ? t("term.done_edit") : t("term.edit");
+}
+
+let presetDraftIndex = null; // -1=新增，>=0=编辑第 index 项，null=编辑器关闭
+function openPresetEditor(index) {
+  presetDraftIndex = index;
+  const presets = app.termPresets?.presets ?? [];
+  const p = index >= 0 ? presets[index] : null;
+  $("termpresettitle").textContent = p ? p.name : t("term.add_preset");
+  $("termpname").value = p?.name ?? "";
+  $("termpcmd").value = p?.command ?? "";
+  // 只剩 1 项时不给删（至少保留一个启动方式）
+  $("termpdel").style.display = (index >= 0 && presets.length > 1) ? "" : "none";
+  $("termpresetsheet").classList.add("open");
+  setTimeout(() => $("termpname").focus(), 60);
+}
+function closePresetEditor() { presetDraftIndex = null; $("termpresetsheet").classList.remove("open"); }
+
+async function savePresetDraft() {
+  const name = $("termpname").value.trim();
+  if (!name) { showToast(t("term.p_name_required")); return; }
+  const command = $("termpcmd").value.trim();
+  const presets = (app.termPresets?.presets ?? []).map((p) => ({ ...p }));
+  if (presetDraftIndex >= 0 && presets[presetDraftIndex]) {
+    presets[presetDraftIndex] = { ...presets[presetDraftIndex], name, command };
+  } else {
+    presets.push({ name, command });
+  }
+  if (await commitPresets(presets)) closePresetEditor();
+}
+
+async function deleteTermPreset(index) {
+  const presets = app.termPresets?.presets ?? [];
+  if (presets.length <= 1) { showToast(t("term.p_last")); return false; }
+  const p = presets[index];
+  if (!confirm(t("term.p_del_confirm", p?.name ?? ""))) return false;
+  const next = presets.filter((_, i) => i !== index);
+  return commitPresets(next);
+}
+
+// 提交 preset 列表到 daemon；成功后用回传的规整列表更新状态并重渲染。返回是否成功。
+async function commitPresets(presets) {
+  try {
+    const res = await app.session.request("terminal.savePresets", { presets });
+    app.termPresets = { ...(app.termPresets ?? {}), presets: res.presets ?? [] };
+  } catch (err) {
+    showToast(t("term.presets_save_fail", err.message));
+    return false;
+  }
+  const ids = new Set((app.termPresets.presets ?? []).map((p) => p.id));
+  if (!ids.has(termSheetSel)) termSheetSel = app.termPresets.presets?.[0]?.id ?? "shell";
+  renderTermPresets();
+  return true;
 }
 
 // 工作目录卡片渲染：无输入时露最近 TERM_CWD_SHOW 个，输入即筛全量（basename 命中优先、
@@ -9837,6 +9978,11 @@ async function main() {
   $("termstart").onclick = startTerminal;
   $("termcwd").addEventListener("input", (e) => renderTermCwds(e.target.value)); // 输入即筛工作目录
   $("termsheet").onclick = (e) => { if (e.target === $("termsheet")) $("termsheet").classList.remove("open"); };
+  // 启动方式编辑：切换编辑态 / 保存 / 删除 / 点背景关编辑器
+  $("termedit").onclick = () => { app.termPresetEdit = !app.termPresetEdit; renderTermPresets(); };
+  $("termpsave").onclick = savePresetDraft;
+  $("termpdel").onclick = async () => { if (presetDraftIndex >= 0 && await deleteTermPreset(presetDraftIndex)) closePresetEditor(); };
+  $("termpresetsheet").onclick = (e) => { if (e.target === $("termpresetsheet")) closePresetEditor(); };
   $("tmodeins").onclick = () => setTermMode("ins");
   $("tmodekbd").onclick = () => setTermMode("kbd");
   $("termsend").onclick = sendTermInstruction;

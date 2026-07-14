@@ -8,7 +8,7 @@
 // daemon 启动时经 restore() 扫描注册目录重建。鉴权/角色检查在 ClientSession 层，
 // 这里只认 deviceId/deviceName。
 import { existsSync, statSync } from "node:fs";
-import { join, basename, delimiter } from "node:path";
+import { join, basename } from "node:path";
 import process from "node:process";
 
 import { randomId } from "./crypto.mjs";
@@ -43,38 +43,60 @@ const SWEEP_MS = 30_000; // 静默检测/活跃广播的扫描间隔
 const INPUT_MAX_CHARS = 32_000;
 const REATTACH_TRIES = 3; // 意外断连的重连尝试
 
-// —— preset 注册表（§8）——
-// 内置候选；实际显示取决于登录 shell PATH 下的检测结果。Shell 永远存在。
-const PRESET_CANDIDATES = [
+// —— preset（启动方式）——
+// 不再自动探测 PATH：启动方式是「开窗口时跑的一条命令」，由用户在手机端编辑，
+// 持久化在 daemon.json 的 terminalPresets。command 为空串 = 普通登录 shell。
+// 内置两个默认，config 里没有 terminalPresets 时使用（首次编辑保存后落盘）。
+export const DEFAULT_TERMINAL_PRESETS = [
   {
     id: "claude",
     name: "Claude Code",
-    bin: "claude",
-    args: [],
-    defaultInputMode: "instruction",
+    command: "claude",
+    inputMode: "instruction",
     // auto-accept 模式切换是 Claude 的高频操作（§4.5）
     quickKeys: [{ label: "⇧Tab", seq: "\x1b[Z" }],
     silenceNotify: true,
   },
-  { id: "opencode", name: "OpenCode", bin: "opencode", args: [], defaultInputMode: "instruction", quickKeys: [], silenceNotify: true },
-  { id: "codex", name: "Codex CLI", bin: "codex", args: [], defaultInputMode: "instruction", quickKeys: [], silenceNotify: true },
-  { id: "gemini", name: "Gemini CLI", bin: "gemini", args: [], defaultInputMode: "instruction", quickKeys: [], silenceNotify: true },
+  { id: "shell", name: "Shell", command: "", inputMode: "keyboard", silenceNotify: false },
 ];
 
-// 在给定 PATH 中找可执行文件的绝对路径（登录 shell env 的 PATH，见 shell-env.mjs）
-function findInPath(bin, pathValue) {
-  if (!pathValue) return null;
-  const exts = process.platform === "win32" ? [".exe", ".cmd", ".bat"] : [""];
-  for (const dir of pathValue.split(delimiter)) {
-    if (!dir) continue;
-    for (const ext of exts) {
-      const p = join(dir, bin + ext);
-      try {
-        if (existsSync(p) && statSync(p).isFile()) return p;
-      } catch {}
-    }
+const PRESET_NAME_MAX = 40;
+const PRESET_CMD_MAX = 500;
+const PRESET_LIST_MAX = 20;
+
+// 校验/规整手机端提交的 preset 列表——纯函数，供手机与将来桌面复用。
+// 抛 { code: 400 } 表示非法输入。返回落盘用的规整数组（至少 1 项）。
+export function normalizeTerminalPresets(list) {
+  if (!Array.isArray(list) || list.length === 0) {
+    throw Object.assign(new Error("至少需要一个启动方式"), { code: 400 });
   }
-  return null;
+  if (list.length > PRESET_LIST_MAX) {
+    throw Object.assign(new Error(`启动方式最多 ${PRESET_LIST_MAX} 个`), { code: 400 });
+  }
+  const stripCtl = (s) => String(s).replace(/[\x00-\x1f\x7f]/g, "");
+  const out = [];
+  const seenIds = new Set();
+  for (const p of list) {
+    const name = stripCtl(p?.name ?? "").trim();
+    if (!name) throw Object.assign(new Error("启动方式名称不能为空"), { code: 400 });
+    if (name.length > PRESET_NAME_MAX) {
+      throw Object.assign(new Error(`名称最长 ${PRESET_NAME_MAX} 字`), { code: 400 });
+    }
+    // 命令允许为空（= 普通命令行）；仅去掉 NUL，其余（含空格/引号/管道）原样保留，等价 Shell 输入
+    const command = String(p?.command ?? "").replace(/\x00/g, "");
+    if (command.length > PRESET_CMD_MAX) {
+      throw Object.assign(new Error(`命令最长 ${PRESET_CMD_MAX} 字`), { code: 400 });
+    }
+    let id = typeof p?.id === "string" && /^[\w-]{1,32}$/.test(p.id) ? p.id : `p${randomId(6)}`;
+    while (seenIds.has(id)) id = `p${randomId(6)}`; // 去重，防前端传重复 id
+    seenIds.add(id);
+    const item = { id, name, command };
+    if (p?.inputMode === "keyboard" || p?.inputMode === "instruction") item.inputMode = p.inputMode;
+    if (Array.isArray(p?.quickKeys)) item.quickKeys = p.quickKeys;
+    if (typeof p?.silenceNotify === "boolean") item.silenceNotify = p.silenceNotify;
+    out.push(item);
+  }
+  return out;
 }
 
 // 单字符在 JSON.stringify 后占的字节数（UTF-8 + JSON 转义）：控制字符 → \uXXXX(6)
@@ -114,7 +136,10 @@ const clampRows = (n) => Math.max(5, Math.min(300, n));
 
 function defaultShell(env) {
   if (process.platform === "win32") {
-    return { executable: findInPath("powershell", env.PATH) ?? "powershell.exe", args: ["-NoLogo"] };
+    // 不扫 PATH：用标准绝对路径，pty-host exec 直接可用（env.PATH 仍作兜底）
+    const root = env.SystemRoot || env.SYSTEMROOT || "C:\\Windows";
+    const ps = join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+    return { executable: existsSync(ps) ? ps : "powershell.exe", args: ["-NoLogo"] };
   }
   const sh = env.SHELL && existsSync(env.SHELL) ? env.SHELL : "/bin/sh";
   return { executable: sh, args: ["-l"] };
@@ -132,13 +157,13 @@ export class TerminalManager {
   #xterm = null; // { Terminal, SerializeAddon }，懒加载
   #sessions = new Map(); // terminalId -> session
   #pendingCreates = 0; // 在途 create（插入 map 前的同步窗口）计数，供上限判定
-  #presets = null; // 检测结果缓存
+  #getPresets; // () => config.terminalPresets（缺省内置默认）；每次读实时反映编辑
   #recentCwds = []; // 最近使用目录（本进程内记忆）
   #sweepTimer = null;
   #activityDirty = false; // lastOutputAt 有更新，下次扫描时广播节流的 listChanged
   #stopped = false;
 
-  constructor({ hostBin, baseDir, log = () => {}, isCwdAllowed = () => true, onEvent = () => {}, broadcast = () => {}, adapter, getEnv, xterm }) {
+  constructor({ hostBin, baseDir, log = () => {}, isCwdAllowed = () => true, onEvent = () => {}, broadcast = () => {}, adapter, getEnv, getPresets, xterm }) {
     this.#hostBin = hostBin;
     this.#baseDir = baseDir;
     this.#log = log;
@@ -147,6 +172,7 @@ export class TerminalManager {
     this.#broadcast = broadcast;
     this.#adapter = adapter ?? { spawnPtyHost, reattachPtyHost, listPtyHosts, removePtyHostDir };
     this.#getEnv = getEnv ?? captureShellEnv;
+    this.#getPresets = getPresets ?? (() => DEFAULT_TERMINAL_PRESETS);
     if (xterm) this.#xterm = xterm;
     this.#sweepTimer = setInterval(() => this.#sweep(), SWEEP_MS);
     this.#sweepTimer.unref?.();
@@ -165,27 +191,41 @@ export class TerminalManager {
   }
 
   // —— preset ——
+  // 把 config 里的可编辑 preset（{id,name,command,...}）解析成运行对象：
+  // command 空 = 交互式登录 shell；非空 = 登录 shell -lc "command"（Windows 用 powershell）。
+  // 含 executable/args（供 create 用）与 command/展示字段（供客户端编辑/UI）。
+  async #buildPresets() {
+    let list = this.#getPresets();
+    if (!Array.isArray(list) || list.length === 0) list = DEFAULT_TERMINAL_PRESETS;
+    const env = await this.#getEnv();
+    const sh = defaultShell(env);
+    const win = process.platform === "win32";
+    return list.map((p) => {
+      const command = String(p.command ?? "");
+      const isShell = command.trim() === "";
+      const executable = sh.executable;
+      const args = isShell
+        ? sh.args
+        : win
+          ? ["-NoLogo", "-Command", command]
+          : [...sh.args, "-c", command]; // 如 ["-l","-c","claude"]
+      return {
+        id: p.id,
+        name: p.name,
+        command,
+        executable,
+        args,
+        defaultInputMode: p.inputMode ?? (isShell ? "keyboard" : "instruction"),
+        quickKeys: Array.isArray(p.quickKeys) ? p.quickKeys : [],
+        silenceNotify: typeof p.silenceNotify === "boolean" ? p.silenceNotify : !isShell,
+      };
+    });
+  }
+
+  // 发给客户端的 preset：剥掉 executable/args（内部实现细节），保留 command 供手机编辑，
+  // 及 web 依赖的 defaultInputMode/quickKeys。
   async presets() {
-    if (!this.#presets) {
-      const env = await this.#getEnv();
-      const found = [];
-      for (const c of PRESET_CANDIDATES) {
-        const abs = findInPath(c.bin, env.PATH);
-        if (abs) found.push({ ...c, executable: abs });
-      }
-      const sh = defaultShell(env);
-      found.push({
-        id: "shell",
-        name: "Shell",
-        executable: sh.executable,
-        args: sh.args,
-        defaultInputMode: "keyboard",
-        quickKeys: [],
-        silenceNotify: false, // Shell preset 默认关（§12.1）
-      });
-      this.#presets = found;
-    }
-    return this.#presets.map(({ bin, ...p }) => p);
+    return (await this.#buildPresets()).map(({ executable, args, ...p }) => p);
   }
 
   async presetById(id) {
@@ -251,11 +291,10 @@ export class TerminalManager {
   }
 
   async #doCreate({ presetId, cwd, cols, rows, deviceId, deviceName }) {
-    const preset = (await this.presets(), this.#presets.find((p) => p.id === presetId));
+    // executable 恒为登录 shell（必然存在）；命令不存在时由 shell 自身在终端里报
+    // "command not found"，故不再做二进制存在性预检。
+    const preset = (await this.#buildPresets()).find((p) => p.id === presetId);
     if (!preset) throw Object.assign(new Error(`未知启动方式: ${presetId}`), { code: 400 });
-    if (preset.id !== "shell" && !existsSync(preset.executable)) {
-      throw Object.assign(new Error(`未找到 ${preset.name}，请在电脑上确认安装`), { code: 404 });
-    }
     if (typeof cwd !== "string" || !cwd) throw Object.assign(new Error("缺少工作目录"), { code: 400 });
     let st;
     try {

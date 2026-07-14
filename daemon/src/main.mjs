@@ -337,6 +337,9 @@ export async function startDaemon({ configPath, overrides = {}, emit = () => {} 
       baseDir: join(dirname(configPath), "pty"),
       log,
       isCwdAllowed: (cwd) => daemonContext.isCwdAllowed(cwd),
+      // 启动方式列表：读实时 config（手机端 terminal.savePresets 编辑后即时反映）；
+      // 缺省时 manager 回退到内置默认（Claude Code + Shell）。
+      getPresets: () => daemonContext.config.terminalPresets,
       // 通知闭环（§12）：bell/退出/静默超时 → webhook。只发终端标题与事件类型，
       // 不含命令、cwd、输出正文；深链 t=<terminalId> 直达终端页。全部事件仅在
       // 无客户端在线时推送（有人在看就别打扰；自发起 close 在 manager 层已抑制）。

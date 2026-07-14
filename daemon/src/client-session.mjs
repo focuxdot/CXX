@@ -14,6 +14,7 @@ import {
   saveConfig,
 } from "./config.mjs";
 import { deriveSessionKey, open as sealedOpen, seal } from "./crypto.mjs";
+import { normalizeTerminalPresets } from "./terminal-manager.mjs";
 import { listClaudeCommands, searchFiles } from "./file-search.mjs";
 import { readRolloutWindow, RolloutTail } from "./rollout-tail.mjs";
 
@@ -1058,6 +1059,15 @@ export class ClientSession {
         case "terminal.presets":
           this.#reply(message.id, { presets: await tm.presets(), recentCwds: tm.recentCwds() });
           return;
+        case "terminal.savePresets": {
+          // 手机端保存「启动方式」列表：校验后即时写入内存 config（下次 create/presets 立即生效）
+          // 并落盘（config-watch 亦会热加载）。门控已由上方 #terminalAccess() 统一把关。
+          const norm = normalizeTerminalPresets(p.presets);
+          this.#daemon.config.terminalPresets = norm;
+          saveConfig(this.#daemon.configPath, this.#daemon.config);
+          this.#reply(message.id, { presets: await tm.presets() });
+          return;
+        }
         case "terminal.list":
           this.#reply(message.id, { terminals: tm.list() });
           return;

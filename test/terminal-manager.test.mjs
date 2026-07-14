@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { TerminalManager } from "../daemon/src/terminal-manager.mjs";
+import { TerminalManager, normalizeTerminalPresets, DEFAULT_TERMINAL_PRESETS } from "../daemon/src/terminal-manager.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -65,7 +65,7 @@ function makeEnv() {
 // hostBin 用一个必然存在的文件充数（available 检查 existsSync）
 const FAKE_HOST_BIN = process.execPath;
 
-function makeManager({ onEvent, broadcast, adapter, isCwdAllowed } = {}) {
+function makeManager({ onEvent, broadcast, adapter, isCwdAllowed, getPresets } = {}) {
   const events = [];
   const broadcasts = [];
   const spawned = [];
@@ -94,20 +94,90 @@ function makeManager({ onEvent, broadcast, adapter, isCwdAllowed } = {}) {
     broadcast: broadcast ?? ((method, params) => broadcasts.push({ method, params })),
     adapter: adapter ?? defaultAdapter,
     getEnv: () => Promise.resolve(makeEnv()),
+    ...(getPresets ? { getPresets } : {}),
   });
   return { mgr, events, broadcasts, spawned };
 }
 
-test("presets：Shell 恒在且静默通知默认关，未安装的 Agent 不出现", async () => {
-  const { mgr } = makeManager();
+test("presets：缺省内置 Claude Code + Shell，不做 PATH 探测，剥离 executable/args", async () => {
+  const { mgr } = makeManager(); // 不传 getPresets → 回退内置默认
   const presets = await mgr.presets();
+  assert.deepEqual(presets.map((p) => p.id), ["claude", "shell"]);
   const shell = presets.find((p) => p.id === "shell");
-  assert.ok(shell);
   assert.equal(shell.silenceNotify, false);
   assert.equal(shell.defaultInputMode, "keyboard");
-  // PATH 指向不存在目录：所有 Agent preset 都检测不到
-  assert.equal(presets.filter((p) => p.id !== "shell").length, 0);
+  assert.equal(shell.command, "");
+  const claude = presets.find((p) => p.id === "claude");
+  assert.equal(claude.command, "claude");
+  assert.equal(claude.defaultInputMode, "instruction");
+  // executable/args 是内部实现，不下发客户端
+  for (const p of presets) {
+    assert.equal(p.executable, undefined);
+    assert.equal(p.args, undefined);
+  }
   mgr.stop();
+});
+
+test("presets：读实时 config，command→spec 走登录 shell -lc；空命令=交互式 shell", async () => {
+  let list = [
+    { id: "htop", name: "htop", command: "htop" },
+    { id: "shell", name: "Shell", command: "" },
+  ];
+  const { mgr, spawned } = makeManager({ getPresets: () => list });
+  let presets = await mgr.presets();
+  assert.deepEqual(presets.map((p) => p.id), ["htop", "shell"]);
+
+  // 非空命令：executable=登录 shell，args=[...shell.args, "-c", command]
+  await mgr.create({ presetId: "htop", cwd: tmpdir(), deviceId: "devA" });
+  const htopSpec = spawned.at(-1).spec;
+  assert.equal(htopSpec.executable, "/bin/sh");
+  assert.deepEqual(htopSpec.args, ["-l", "-c", "htop"]);
+
+  // 空命令：交互式登录 shell（无 -c）
+  await mgr.create({ presetId: "shell", cwd: tmpdir(), deviceId: "devB" });
+  const shSpec = spawned.at(-1).spec;
+  assert.equal(shSpec.executable, "/bin/sh");
+  assert.deepEqual(shSpec.args, ["-l"]);
+
+  // 编辑 config 后 presets() 立即反映（无缓存）
+  list = [{ id: "only", name: "Only", command: "echo hi" }];
+  presets = await mgr.presets();
+  assert.deepEqual(presets.map((p) => p.id), ["only"]);
+  mgr.stop();
+});
+
+test("normalizeTerminalPresets：校验、去控制符、补 id、条数/长度上限、至少 1 项", () => {
+  // 正常 + id 补全
+  const out = normalizeTerminalPresets([{ name: "A", command: "a" }, { id: "keep", name: "B", command: "" }]);
+  assert.equal(out.length, 2);
+  assert.match(out[0].id, /^p[\w-]+$/); // 缺 id → 生成
+  assert.equal(out[1].id, "keep");
+  // 去掉名字里的控制符
+  assert.equal(normalizeTerminalPresets([{ name: "x\x00\x1by", command: "" }])[0].name, "xy");
+  // 空列表 / 非数组 → 400
+  assert.throws(() => normalizeTerminalPresets([]), /至少/);
+  assert.throws(() => normalizeTerminalPresets("nope"), /至少/);
+  // 空名字 → 400
+  assert.throws(() => normalizeTerminalPresets([{ name: "   ", command: "x" }]), /名称不能为空/);
+  // 名字过长 → 400
+  assert.throws(() => normalizeTerminalPresets([{ name: "n".repeat(41), command: "" }]), /名称最长/);
+  // 命令过长 → 400
+  assert.throws(() => normalizeTerminalPresets([{ name: "ok", command: "c".repeat(501) }]), /命令最长/);
+  // 超过 20 项 → 400
+  assert.throws(
+    () => normalizeTerminalPresets(Array.from({ length: 21 }, (_, i) => ({ name: `p${i}`, command: "" }))),
+    /最多/,
+  );
+  // 保留 inputMode/quickKeys/silenceNotify，命令去 NUL
+  const kept = normalizeTerminalPresets([
+    { name: "C", command: "a\x00b", inputMode: "keyboard", quickKeys: [{ label: "x", seq: "y" }], silenceNotify: true },
+  ])[0];
+  assert.equal(kept.command, "ab");
+  assert.equal(kept.inputMode, "keyboard");
+  assert.deepEqual(kept.quickKeys, [{ label: "x", seq: "y" }]);
+  assert.equal(kept.silenceNotify, true);
+  // 内置默认自身应通过校验
+  assert.doesNotThrow(() => normalizeTerminalPresets(DEFAULT_TERMINAL_PRESETS));
 });
 
 test("create：未知 preset / 坏 cwd / 白名单外 一律拒绝", async () => {
