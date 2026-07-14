@@ -935,7 +935,10 @@ try {
   .termsechdr .termsec { margin-right: auto; }
   .termeditbtn { background: none; border: none; color: var(--accent); font: inherit; font-size: 13px;
                  cursor: pointer; padding: 8px 2px 4px; }
-  .termopt .termdel { margin-left: 8px; font-size: 15px; opacity: .8; flex: 0 0 auto; padding: 2px 4px; }
+  /* 恒定最右：无命令副标题时靠 auto 顶到右侧；有副标题时副标题吃掉空档、删除仍在其右 */
+  .termopt .termdel { margin-left: auto; flex: 0 0 auto; display: inline-flex; align-items: center;
+                      color: var(--dim); padding: 4px; border-radius: 8px; }
+  .termopt .termdel:active { color: var(--danger, #e5484d); background: var(--sunken); }
   .termopt.editing { cursor: pointer; }
   .termaddpreset { justify-content: center; color: var(--accent); border-style: dashed; background: transparent; }
   #termpname, #termpcmd { width: 100%; background: var(--sunken); border: 1px solid var(--border); border-radius: 10px;
@@ -4416,6 +4419,7 @@ function loadMoreRow(fn) {
 const FOLDER_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 const COMPOSE_SVG = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M18.4 2.6a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>';
 const ARCHIVE_SVG = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/></svg>';
+const TRASH_SVG = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg>';
 let projectActionTarget = null;
 
 // 折叠态只存在于本次会话内存里，不持久化：每次加载首页所有项目/「对话」段一律折叠
@@ -9091,7 +9095,9 @@ function renderTermPresets() {
     if (editing) {
       const del = document.createElement("span");
       del.className = "termdel";
-      del.textContent = "🗑";
+      del.setAttribute("role", "button");
+      del.setAttribute("aria-label", t("term.p_del"));
+      del.innerHTML = TRASH_SVG;
       del.onclick = (e) => { e.stopPropagation(); deleteTermPreset(i); };
       b.appendChild(del);
       b.onclick = () => openPresetEditor(i);
