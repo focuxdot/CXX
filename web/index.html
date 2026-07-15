@@ -893,23 +893,36 @@ try {
              border-radius: 24px; padding: 12px 18px; background: var(--text); color: var(--bg);
              font-size: 16px; font-weight: 600; cursor: pointer; }
   #newterm:active { opacity: .8; }
-  /* 终端页：画布 v1 恒深色，不随 App 主题切换（§14.2） */
+  /* 终端页：画布恒深色，不随 App 主题切换（§14.2） */
   #termpage { display: none; }
-  body.interminal #termpage { display: block; }
-  /* 终端页锁整页滚动：main 去内边距/宽度上限满屏，body 不滚——滚动交给 xterm 自己的回滚区 */
-  body.interminal { overflow: hidden; }
-  body.interminal main { padding: 0 !important; max-width: none; }
+  /* 终端页用真实的 header/main 剩余高度布局，不再写死 53px。状态条出现时由 flex 自动扣除高度，
+     避免 xterm 仍按被遮住的整屏高度 fit，导致底部若干行实际落在视口外。 */
+  body.interminal { overflow: hidden; height: 100dvh; display: flex; flex-direction: column; }
+  body.interminal > header { flex: none; width: 100%; background: #20242c; border-bottom-color: #343a45; }
+  body.interminal main { flex: 1 1 auto; min-height: 0; width: 100%; padding: 0 !important; max-width: none; }
+  body.interminal #termpage { display: flex; flex-direction: column; min-height: 0;
+                              height: calc(100% - var(--termkbdgap, 0px) - env(safe-area-inset-bottom));
+                              background: #282c34; }
   body.interminal #list, body.interminal #termlist { display: none !important; }
-  /* 终端画布铺满：header 之下直到底部；软键盘弹起时用 --termkbdgap 缩短到键盘上沿 */
+  /* 终端画布占满状态条以下的真实剩余空间；软键盘弹起时由 #termpage 缩到键盘上沿。 */
   /* touch-action:none —— 手势归 JS：手指拖动转发到 xterm 回滚区（screen 盖住 viewport，原生滚不到） */
-  #termscreen { height: calc(100dvh - 53px - var(--termkbdgap, 0px) - env(safe-area-inset-bottom)); background: #0c0e11;
+  #termscreen { flex: 1 1 auto; min-height: 0; height: auto; background: #282c34;
                 padding: 0; touch-action: none; }
-  #termscreen .xterm { height: 100%; }
-  #termnotice { display: none; position: sticky; top: 53px; z-index: 10; font-size: 13px;
-                padding: 8px 12px; background: var(--warn-bg, rgba(180,140,40,.15)); color: var(--text); }
+  /* xterm 按整字符列取整，余下像素原本全堆在右侧。收窄滚动条后把字符网格居中，
+     让取整余量均分到两侧；纵向安全区放在 xterm 自身上，FitAddon 会一并扣除。 */
+  #termscreen .xterm { height: 100%; padding: 8px 0 9px;
+                       -webkit-font-smoothing: antialiased; font-variant-ligatures: none; }
+  #termscreen .xterm-screen { margin-inline: auto; }
+  #termscreen .xterm-viewport { scrollbar-width: thin; scrollbar-color: rgba(216,222,233,.22) transparent; }
+  #termscreen .xterm-viewport::-webkit-scrollbar { width: 6px; }
+  #termscreen .xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+  #termscreen .xterm-viewport::-webkit-scrollbar-thumb { background: rgba(216,222,233,.22); border-radius: 999px; }
+  #termnotice { display: none; position: relative; flex: none; z-index: 10; font-size: 13px; line-height: 1.35;
+                padding: 7px 10px; background: #242932; color: #cbd1d8;
+                border-bottom: 1px solid #343a45; }
   #termnotice.show { display: flex; align-items: center; gap: 10px; }
   #termnotice .sp { flex: 1; }
-  #termnotice button { border: 1px solid var(--border); background: var(--raised); color: var(--text);
+  #termnotice button { border: 1px solid #414957; background: #303641; color: #e3e7eb;
                        border-radius: 8px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
   /* 快捷键：一个悬浮钮（位置可长按拖动、按浏览器记忆）+ 一条从它横向拉出的抽屉（无底部输入栏，直连键盘） */
   /* wrap 铺满视口只为承载可自由拖动的悬浮钮；本身 pointer-events:none 不挡终端触控 */
@@ -939,9 +952,14 @@ try {
   #termkeys button.intr { color: var(--err); }
   #termkeystoggle { position: absolute; right: 10px; bottom: 20%; pointer-events: auto; touch-action: none;
                     width: 44px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
-                    border: 1px solid var(--border); background: var(--raised); color: var(--dim);
-                    border-radius: 12px; cursor: pointer; opacity: .9; box-shadow: 0 2px 12px rgba(0,0,0,.4);
-                    transition: transform .12s ease, box-shadow .12s ease; }
+                    border: 1px solid rgba(216,222,233,.12); background: rgba(20,24,31,.52); color: #c0c7d0;
+                    border-radius: 12px; cursor: pointer; opacity: .62; box-shadow: 0 2px 10px rgba(0,0,0,.2);
+                    transition: transform .12s ease, box-shadow .12s ease, opacity .16s ease,
+                                background-color .16s ease, border-color .16s ease; }
+  #termkeystoggle:hover, #termkeystoggle:focus-visible, #termkeystoggle:active {
+    opacity: 1; background: rgba(20,24,31,.94); border-color: rgba(216,222,233,.28);
+    box-shadow: 0 4px 16px rgba(0,0,0,.34);
+  }
   body.termkeysopen #termkeystoggle { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); opacity: 1; }
   /* 长按进入拖动态：抬起 + 描边，给用户"抓起来了"的反馈 */
   #termkeystoggle.dragging { transform: scale(1.15); opacity: 1; cursor: grabbing;
@@ -966,9 +984,14 @@ try {
   /* 输入切换钮：与快捷键钮同款；默认在快捷键钮上方 52px；可长按拖动、左右吸附 */
   #terminputtoggle { position: absolute; right: 10px; bottom: calc(20% + 52px); pointer-events: auto; touch-action: none;
                      width: 44px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
-                     border: 1px solid var(--border); background: var(--raised); color: var(--dim);
-                     border-radius: 12px; cursor: pointer; opacity: .9; box-shadow: 0 2px 12px rgba(0,0,0,.4);
-                     transition: transform .12s ease, box-shadow .12s ease; }
+                     border: 1px solid rgba(216,222,233,.12); background: rgba(20,24,31,.52); color: #c0c7d0;
+                     border-radius: 12px; cursor: pointer; opacity: .62; box-shadow: 0 2px 10px rgba(0,0,0,.2);
+                     transition: transform .12s ease, box-shadow .12s ease, opacity .16s ease,
+                                 background-color .16s ease, border-color .16s ease; }
+  #terminputtoggle:hover, #terminputtoggle:focus-visible, #terminputtoggle:active {
+    opacity: 1; background: rgba(20,24,31,.94); border-color: rgba(216,222,233,.28);
+    box-shadow: 0 4px 16px rgba(0,0,0,.34);
+  }
   body.terminputopen #terminputtoggle { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); opacity: 1; }
   #terminputtoggle.dragging { transform: scale(1.15); opacity: 1; cursor: grabbing;
                               border-color: var(--accent); color: var(--accent); box-shadow: 0 6px 22px rgba(0,0,0,.55); }
@@ -9071,11 +9094,12 @@ function renderOnboarding() {
 
 // —— 一次性启动 ——
 // —— Terminal Mode 前端（internal/TERMINAL-MODE.md §4/§9/§14）——
-// 画布 v1 恒深色：固定精调 16 色 palette，不随 App 主题/accent 变化（§14.2）。
+// 画布恒深色：以桌面终端常见的 One Dark 中性灰为底，固定 16 色 palette，
+// 不随 App 主题/accent 变化（§14.2）。避免近黑网页底色把字重衬得过细，也保留 ANSI 层级。
 const TERM_THEME = {
-  background: "#0c0e11", foreground: "#d8dee9", cursor: "#d8dee9", cursorAccent: "#0c0e11",
-  selectionBackground: "rgba(110,150,210,.35)",
-  black: "#3b4252", red: "#e06c75", green: "#98c379", yellow: "#e5c07b",
+  background: "#282c34", foreground: "#d8dee9", cursor: "#d8dee9", cursorAccent: "#282c34",
+  selectionBackground: "rgba(97,175,239,.28)",
+  black: "#1e2127", red: "#e06c75", green: "#98c379", yellow: "#e5c07b",
   blue: "#61afef", magenta: "#c678dd", cyan: "#56b6c2", white: "#c8ccd4",
   brightBlack: "#5c6370", brightRed: "#ef7a85", brightGreen: "#a9d389", brightYellow: "#f0cf8b",
   brightBlue: "#74bbff", brightMagenta: "#d38ae8", brightCyan: "#66c6d2", brightWhite: "#e6e6e6",
@@ -9495,9 +9519,11 @@ async function openTerminal(terminalId, opts = {}) {
     rows: tv?.rows || 24,
     theme: TERM_THEME,
     fontSize,
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+    fontFamily: 'ui-monospace, "SFMono-Regular", "Cascadia Mono", "Roboto Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace',
     scrollback: 2000,
-    minimumContrastRatio: 3.5, // 可读性兜底（§14.2；真机实测 3–4.5 区间取中）
+    // 桌面终端通常尊重程序自己的 ANSI 明暗层级。保留温和兜底，但不再把 dim/black
+    // 一律抬到正文对比度，避免 TUI 的视觉层级被“洗平”。
+    minimumContrastRatio: 2,
     allowProposedApi: true,
     screenReaderMode: false,
   });

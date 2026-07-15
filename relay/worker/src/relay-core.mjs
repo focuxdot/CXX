@@ -156,6 +156,7 @@ export class BaseRelayRoom {
         daemonId,
         cid,
         clientCount: this.#state.getWebSockets("client").length,
+        online,
         meta: daemonMeta,
       });
       serverEnd.send(JSON.stringify({ t: "status", online, lastSeen, ...(epoch != null ? { epoch } : {}) }));
