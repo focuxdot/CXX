@@ -129,6 +129,10 @@ const LEGACY_CONFLICT_NOTIFY_COOLDOWN_MS = 60 * 60_000;
 
 async function maybeNotifyLegacyConflict(env, storage, daemonId, meta = {}, productLabel) {
   try {
+    if (isSyntheticProbeDaemon(daemonId)) {
+      console.info(JSON.stringify({ event: "telegram_notify_skip", reason: "synthetic_probe", daemonId }));
+      return;
+    }
     const now = Date.now();
     const notifiedAt = Number(await storage.get(LEGACY_CONFLICT_NOTIFY_KEY)) || 0;
     if (notifiedAt && now - notifiedAt < LEGACY_CONFLICT_NOTIFY_COOLDOWN_MS) {
@@ -171,6 +175,10 @@ async function maybeNotifyLegacyConflict(env, storage, daemonId, meta = {}, prod
 
 async function maybeNotifyNewDesktop(env, storage, daemonId, meta = {}, productLabel) {
   try {
+    if (isSyntheticProbeDaemon(daemonId)) {
+      console.info(JSON.stringify({ event: "telegram_notify_skip", reason: "synthetic_probe", daemonId }));
+      return;
+    }
     if (await storage.get("firstSeen")) {
       console.info(JSON.stringify({ event: "telegram_notify_skip", reason: "desktop_already_seen", daemonId }));
       return;
@@ -293,6 +301,10 @@ function appLabel(app) {
 function countryLabel(country) {
   const value = String(country || "").toUpperCase();
   return value && value !== "XX" ? value.slice(0, 8) : "unknown";
+}
+
+function isSyntheticProbeDaemon(daemonId) {
+  return /^(?:verify|review)[A-Za-z0-9_-]{8,64}$/u.test(String(daemonId || ""));
 }
 
 function renderStats(rows, apps = []) {
