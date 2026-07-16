@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { request } from "node:http";
 import test from "node:test";
 
 import { createRelayServer } from "../relay/node/server.mjs";
@@ -13,6 +14,30 @@ function waitEvent(target, name, timeoutMs = 3000) {
   });
 }
 
+function legacyUpgradeStatus(url, { includeKey = true } = {}) {
+  return new Promise((resolve, reject) => {
+    const headers = {
+      Connection: "Upgrade",
+      Upgrade: "websocket",
+      "Sec-WebSocket-Version": "13",
+    };
+    if (includeKey) headers["Sec-WebSocket-Key"] = "dGhlIHNhbXBsZSBub25jZQ==";
+    const req = request(url, {
+      headers,
+    });
+    req.once("response", (response) => {
+      response.resume();
+      resolve(response.statusCode);
+    });
+    req.once("upgrade", (_response, socket) => {
+      socket.destroy();
+      reject(new Error("legacy conflict unexpectedly upgraded"));
+    });
+    req.once("error", reject);
+    req.end();
+  });
+}
+
 test("node relay rejects a different healthy daemon instance and lets the same instance replace itself", async () => {
   const server = createRelayServer();
   server.listen(0, "127.0.0.1");
@@ -22,6 +47,16 @@ test("node relay rejects a different healthy daemon instance and lets the same i
   await waitEvent(first, "open");
   first.send('{"t":"hb"}');
   await waitEvent(first, "message");
+
+  const legacyStatus = await legacyUpgradeStatus(base.replace("ws://", "http://"));
+  assert.equal(legacyStatus, 409);
+  assert.equal(first.readyState, WebSocket.OPEN);
+
+  const malformedStatus = await legacyUpgradeStatus(base.replace("ws://", "http://"), {
+    includeKey: false,
+  });
+  assert.equal(malformedStatus, 400);
+  assert.equal(first.readyState, WebSocket.OPEN);
 
   const other = new WebSocket(`${base}?inst=boot_two_123`);
   const rejected = await waitEvent(other, "close");

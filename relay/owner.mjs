@@ -24,3 +24,18 @@ export function daemonConnectionDecision({
   const lastHealthyAt = timestampMs(lastHeartbeatAt) || timestampMs(openedAt);
   return lastHealthyAt && now - lastHealthyAt <= freshMs ? "reject" : "replace";
 }
+
+// 健康 owner 冲突需要按客户端能力分流：当前 daemon 能理解升级后的显式拒绝信号，
+// 并据此进入 2–5min 低频接管探测；legacy daemon 没有实例 id，必须在 WS 升级前以 HTTP 拒绝，
+// 避免旧版在 onopen 后清空退避并形成秒级连接风暴。
+export function daemonConnectionAction(options = {}) {
+  const incomingInstanceId = normalizeDaemonInstanceId(options.incomingInstanceId);
+  const existingInstanceId = normalizeDaemonInstanceId(options.existingInstanceId);
+  const decision = daemonConnectionDecision({
+    ...options,
+    incomingInstanceId,
+    existingInstanceId,
+  });
+  if (decision === "replace") return "replace";
+  return incomingInstanceId ? "reject-websocket" : "reject-http";
+}

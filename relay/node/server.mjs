@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import { parseArgs } from "node:util";
 
 import { upgradeConnection } from "./ws-server.mjs";
-import { daemonConnectionDecision, normalizeDaemonInstanceId } from "../owner.mjs";
+import { daemonConnectionAction, normalizeDaemonInstanceId } from "../owner.mjs";
 
 export function parsePath(pathname) {
   const match = /^\/v1\/(daemon|client)\/([A-Za-z0-9_-]{8,64})$/.exec(pathname);
@@ -44,18 +44,39 @@ export function createRelayServer({ log = () => {} } = {}) {
       socket.end("HTTP/1.1 404 Not Found\r\n\r\n");
       return;
     }
-    const conn = upgradeConnection(req, socket);
-    if (!conn) return;
-    const r = room(target.daemonId);
+    if (!req.headers["sec-websocket-key"] || req.headers.upgrade?.toLowerCase() !== "websocket") {
+      socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+      return;
+    }
+    let r = rooms.get(target.daemonId);
+    let daemonAction = "replace";
+    let incomingInstanceId = "";
 
     if (target.role === "daemon") {
-      const incomingInstanceId = normalizeDaemonInstanceId(url.searchParams.get("inst"));
-      if (r.daemon && daemonConnectionDecision({
-        incomingInstanceId,
-        existingInstanceId: r.daemonMeta?.instanceId,
-        lastHeartbeatAt: r.daemonMeta?.lastHeartbeatAt,
-        openedAt: r.daemonMeta?.openedAt,
-      }) === "reject") {
+      incomingInstanceId = normalizeDaemonInstanceId(url.searchParams.get("inst"));
+      if (r?.daemon) {
+        daemonAction = daemonConnectionAction({
+          incomingInstanceId,
+          existingInstanceId: r.daemonMeta?.instanceId,
+          lastHeartbeatAt: r.daemonMeta?.lastHeartbeatAt,
+          openedAt: r.daemonMeta?.openedAt,
+        });
+      }
+      if (daemonAction === "reject-http") {
+        socket.end(
+          "HTTP/1.1 409 Conflict\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
+        );
+        log(`legacy daemon 接入被拒（健康 owner 已在线）: ${target.daemonId}`);
+        return;
+      }
+    }
+
+    const conn = upgradeConnection(req, socket);
+    if (!conn) return;
+    r = room(target.daemonId);
+
+    if (target.role === "daemon") {
+      if (daemonAction === "reject-websocket") {
         conn.close(1008, "daemon already connected");
         log(`daemon 接入被拒（健康 owner 已在线）: ${target.daemonId}`);
         return;

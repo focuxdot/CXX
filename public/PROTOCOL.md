@@ -11,7 +11,10 @@ WebSocket 端点：
 - `wss://<relay>/v1/daemon/<daemonId>?ver=<version>&inst=<bootId>` — daemon 出站注册。
   `inst` 是每次 daemon 进程启动生成的随机实例 id：同实例重连可替换自己的旧 socket；不同实例
   只有在旧 socket 最近 60s 无心跳时才能接管，旧/新进程不再无条件互踢。旧 daemon 不带参数时
-  relay 以最近自动心跳时间和连接建立时间兼容判断。
+  relay 以最近自动心跳时间和连接建立时间兼容判断。健康 owner 已在线时，当前 daemon 完成升级后
+  收到 `{"t":"reject","reason":"owner_conflict"}` 并进入 2–5min 接管探测；Node/旧 relay 的
+  1008 `daemon already connected` 保持兼容。不带有效 `inst` 的旧 daemon 在升级前收到 HTTP 409，
+  避免旧版在短连接上反复清空退避。
 - `wss://<relay>/v1/client/<daemonId>` — client 连接。relay 为每条 client 连接分配连接内唯一的 `cid`。
 
 `daemonId`：16 字节随机数的 base64url（daemon 首次运行生成，持久化）。
@@ -27,8 +30,9 @@ WebSocket 端点：
 | daemon → relay | `{"t":"msg","cid":"...","data":{...}}` | 回发给指定 cid |
 | relay → client | `{"t":"msg","data":{...}}` | |
 | relay → daemon | `{"t":"close","cid":"..."}` | client 断开 |
+| relay → daemon | `{"t":"reject","reason":"owner_conflict"}` | 当前 daemon 与健康 owner 冲突。daemon 主动关闭本连接并改为每 2–5min 低频探测接管；兼容 Node/旧 relay 的 1008 `daemon already connected` |
 | daemon → relay | `{"t":"close","cid":"..."}` | 要求 relay 断开该 client（如鉴权失败） |
-| daemon/client ↔ relay | `{"t":"hb"}` | 心跳，relay 原样回发。daemon 每 25s 一拍并验收回包（超 10s 判死链重连）；只有首拍成功才把连接视为稳定并清重试退避。普通重连采用 1–60s 随机指数退避，2min 内累计 10 次短连接时冷却 2–5min；若 relay 以 1008 明确表示另一 daemon owner 仍健康，则直接改为每 2–5min 低频探测接管。client 仅页面前台时每 25s 一拍做僵尸连接检测（旧 relay 不应答时 client 自动退化为不检测）。Worker 形态经 `setWebSocketAutoResponse` 在边缘应答（不唤醒 DO），发送串须与 `{"t":"hb"}` 逐字一致 |
+| daemon/client ↔ relay | `{"t":"hb"}` | 心跳，relay 原样回发。daemon 每 25s 一拍并验收回包（超 10s 判死链重连）；只有首拍成功才把连接视为稳定并清重试退避。普通重连采用 1–60s 随机指数退避，2min 内累计 10 次短连接时冷却 2–5min；若 relay 以 `owner_conflict` 拒绝帧或兼容的 1008 明确表示另一 daemon owner 仍健康，则直接改为每 2–5min 低频探测接管。client 仅页面前台时每 25s 一拍做僵尸连接检测（旧 relay 不应答时 client 自动退化为不检测）。Worker 形态经 `setWebSocketAutoResponse` 在边缘应答（不唤醒 DO），发送串须与 `{"t":"hb"}` 逐字一致 |
 
 relay 不解析 `data` 内容。daemon 断开时，relay 向所有 client 推 `{"t":"status","online":false}` 并保持 client 连接，等 daemon 重连后推 `online:true`。
 

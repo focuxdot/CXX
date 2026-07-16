@@ -9,6 +9,7 @@ This directory is the public, self-hostable relay Worker.
 - `src/relay-core.mjs` contains the shared relay protocol implementation used by
   both public and internal entrypoints.
 
-Official Wokey deployment files live under the ignored `internal/relay-worker/`
-directory. That internal entrypoint imports `src/relay-core.mjs` and layers in
-operator-only stats and notifications without forking the relay protocol.
+Official Wokey deployment files live under the versioned `internal/relay-worker/`
+directory. That entrypoint imports `src/relay-core.mjs` and layers in operator-only
+stats and notifications without forking the relay protocol; credentials and
+tokens remain in Wrangler secrets.

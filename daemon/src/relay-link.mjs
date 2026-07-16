@@ -14,6 +14,7 @@ const STORM_COOLDOWN_MIN_MS = 2 * 60_000;
 const STORM_COOLDOWN_JITTER_MS = 3 * 60_000;
 const DUPLICATE_DAEMON_CLOSE_CODE = 1008;
 const DUPLICATE_DAEMON_REASON = "daemon already connected";
+const OWNER_CONFLICT_REJECT_REASON = "owner_conflict";
 // onopen 迟迟不来的兜底：TCP/WS 握手卡死、DNS 挂起时 socket 长驻 CONNECTING，
 // onopen 与 onclose 都不触发、心跳（仅 open 后起）也不跑——无此超时即永久假离线。
 const CONNECT_TIMEOUT_MS = 15000;
@@ -128,6 +129,16 @@ export class RelayLink {
         return;
       }
       switch (frame.t) {
+        case "reject":
+          if (frame.reason !== OWNER_CONFLICT_REJECT_REASON || this.#ws !== ws) break;
+          // Cloudflare 在 101 返回前 close 可能吞掉关闭帧；Worker 因而用显式协议帧拒绝。
+          // 先摘回调再主动关闭，避免本地 close 事件重复进入普通断线退避。
+          clearTimeout(connectTimer);
+          ws.onclose = null;
+          ws.onmessage = null;
+          try { ws.close(DUPLICATE_DAEMON_CLOSE_CODE, DUPLICATE_DAEMON_REASON); } catch {}
+          this.#onDisconnect(ownerConflictRetryDelay(this.#random), "owner-conflict");
+          break;
         case "open":
           this.#handlers.onOpen(frame.cid);
           break;
@@ -151,9 +162,9 @@ export class RelayLink {
     };
     ws.onclose = (event = {}) => {
       clearTimeout(connectTimer);
-      // relay 对“不同实例且旧连接最近仍有心跳”回 1008；旧 relay 也可能把自身残留 socket
-      // 判成冲突。不能把 1008 当终态（旧 owner 退出后本实例应自然接管），但健康 owner
-      // 已被明确确认，直接转 2~5min 低频探测，不能沿用普通断线的秒级恢复节奏。
+      // Node/旧 relay 对“不同实例且旧连接最近仍有心跳”仍可能回 1008。不能把它当终态
+      //（旧 owner 退出后本实例应自然接管），但健康 owner 已被明确确认，直接转 2~5min
+      // 低频探测，不能沿用普通断线的秒级恢复节奏。
       if (event.code === DUPLICATE_DAEMON_CLOSE_CODE && event.reason === DUPLICATE_DAEMON_REASON) {
         this.#onDisconnect(ownerConflictRetryDelay(this.#random), "owner-conflict");
         return;

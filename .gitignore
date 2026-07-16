@@ -1,14 +1,28 @@
 node_modules/
+.wrangler/
 dist/
 release-assets/
 *.log
 .DS_Store
 
-# internal planning / requirement docs — never publish (kept on disk, out of the repo)
-internal/
+# Internal planning stays machine-local. The official relay overlay is the narrow exception:
+# its source/config declarations are versioned for reproducible deploys; secrets stay in Wrangler.
+internal/*
+!internal/RELAY-QUOTA-HARDENING.md
+!internal/relay-worker/
+internal/relay-worker/*
+!internal/relay-worker/README.md
+!internal/relay-worker/wrangler.official.toml
+!internal/relay-worker/src/
+!internal/relay-worker/src/**
+!internal/relay-worker/test/
+!internal/relay-worker/test/**
+internal/relay-worker/.dev.vars*
+internal/relay-worker/.env*
+internal/relay-worker/.wrangler/
 docs/
 
-# private Worker entrypoints/configs belong under internal/; keep old local names out
+# Keep obsolete machine-local Worker entrypoint/config names out of the public self-hosting tree.
 relay/worker/src/*.local.mjs
 relay/worker/wrangler*.local.toml
 
