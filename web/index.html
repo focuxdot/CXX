@@ -6661,6 +6661,16 @@ const PERM_ICON = {
   full: SVG(`<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/>`),
 };
 const EFFORT_LABEL = { low: t("effort.low"), medium: t("effort.medium"), high: t("effort.high"), xhigh: t("effort.xhigh") };
+// Claude 的 jsonl 不回传力度、后端也没给 defaultEffort，用它兜底“默认力度”（改这里即可换默认档）
+const CLAUDE_DEFAULT_EFFORT = "high";
+// 某模型的“默认力度”：后端给了用后端的；Claude 缺省时兜底常量（取其支持档里的该值，否则最后一档）
+function modelDefaultEffort(meta) {
+  if (meta?.defaultEffort) return meta.defaultEffort;
+  if (app.agent === "claude" && meta?.efforts?.length) {
+    return meta.efforts.includes(CLAUDE_DEFAULT_EFFORT) ? CLAUDE_DEFAULT_EFFORT : meta.efforts[meta.efforts.length - 1];
+  }
+  return null;
+}
 
 // 模型短名：保留系列/档位 + 版本 + 变体后缀（gpt-5.6-sol -> GPT 5.6 Sol，
 // gpt-5.4-mini -> GPT 5.4 Mini，claude-opus-4-8 -> Opus 4.8）。同版本多变体（Sol/Terra/Luna）
@@ -6911,10 +6921,11 @@ function updateOptButtons() {
   const name = explicit ? (explicitMeta?.name || app.turnOpts.modelName || app.turnOpts.model) : (followMeta?.name || follow?.name || follow?.id);
   mb.classList.toggle("ph", !name);
   if (!name) { mb.textContent = t("btn.model"); return; }
-  const meta = explicit ? explicitMeta : modelMetaById(follow?.id);
+  const meta = explicit ? explicitMeta : (followMeta ?? modelMetaById(follow?.id));
   // 用户显式选的力度优先（脱离"是否换过模型"），否则跟随当前模型的真实/默认力度
+  const dEff = modelDefaultEffort(meta);
   const effKey = app.turnOpts.effort
-    || (explicit ? meta?.defaultEffort : (follow?.effort || meta?.defaultEffort))
+    || (explicit ? dEff : (follow?.effort || dEff))
     || null;
   mb.textContent = "";
   const main = document.createElement("span");
@@ -7072,14 +7083,15 @@ function renderModelSheet() {
     box.appendChild(head);
     const row = document.createElement("div");
     row.className = "effrow";
+    const dEff = modelDefaultEffort(m);
     for (const e of m.efforts) {
       const chip = document.createElement("button");
       chip.className = "chip";
-      const selected = app.turnOpts.effort ? app.turnOpts.effort === e : e === m.defaultEffort;
+      const selected = app.turnOpts.effort ? app.turnOpts.effort === e : e === dEff;
       if (selected) chip.classList.add("sel");
-      chip.textContent = (EFFORT_LABEL[e] ?? e) + (e === m.defaultEffort ? t("effort.defaultSuffix") : "");
+      chip.textContent = (EFFORT_LABEL[e] ?? e) + (e === dEff ? t("effort.defaultSuffix") : "");
       chip.onclick = () => {
-        app.turnOpts.effort = e === m.defaultEffort ? null : e; // 默认力度不显式传
+        app.turnOpts.effort = e === dEff ? null : e; // 默认力度不显式传
         saveTurnOpts();
         updateOptButtons();
         $("modelsheet").classList.remove("open");
