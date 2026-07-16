@@ -103,6 +103,8 @@ try {
   #hleft { justify-content: flex-start; }
   #hright { justify-content: flex-end; }
   #hmid { min-width: 0; text-align: center; }
+  /* 会话页右侧同时有分享和更多按钮；左右预留同宽安全区，长标题只能在中间省略。 */
+  body.insession > header { grid-template-columns: 82px minmax(0, 1fr) 82px; }
   #titlehit { display: inline-block; max-width: 100%; cursor: pointer; user-select: none; }
   header h1 { font-size: 16px; font-weight: 500; margin: 0; line-height: 1.3;
               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -6843,7 +6845,8 @@ function claudeModelState(item) {
   return {
     id: meta?.id ?? id,
     name: meta?.name || id,
-    effort: null,
+    // Claude 的 jsonl 不带 effort，回退到该模型默认力度（后端给了才有值）
+    effort: meta?.defaultEffort ?? null,
   };
 }
 
@@ -6909,9 +6912,10 @@ function updateOptButtons() {
   mb.classList.toggle("ph", !name);
   if (!name) { mb.textContent = t("btn.model"); return; }
   const meta = explicit ? explicitMeta : modelMetaById(follow?.id);
-  const effKey = explicit
-    ? (app.turnOpts.effort || meta?.defaultEffort || null)
-    : (follow?.effort || meta?.defaultEffort || null);
+  // 用户显式选的力度优先（脱离"是否换过模型"），否则跟随当前模型的真实/默认力度
+  const effKey = app.turnOpts.effort
+    || (explicit ? meta?.defaultEffort : (follow?.effort || meta?.defaultEffort))
+    || null;
   mb.textContent = "";
   const main = document.createElement("span");
   main.textContent = modelLabel(id, name);
@@ -7055,7 +7059,11 @@ function renderModelSheet() {
       },
     });
   }
-  const m = app.models.find((x) => x.id === app.turnOpts.model);
+  // 力度选择器脱离"是否换过模型"：显式选了用选中的，否则跟随当前生效模型
+  const follow = app.modelState ?? defaultModelMeta();
+  const m = app.turnOpts.model
+    ? app.models.find((x) => x.id === app.turnOpts.model)
+    : modelMetaById(follow?.id || follow?.name);
   if (m?.efforts?.length) {
     const head = document.createElement("div");
     head.className = "sheethead";
