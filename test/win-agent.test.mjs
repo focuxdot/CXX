@@ -7,6 +7,7 @@ import { join } from "node:path";
 import {
   TASK_NAME,
   buildTaskXml,
+  currentUserId,
   makeDeps,
   isEnabled,
   isRunning,
@@ -64,6 +65,42 @@ test("buildTaskXml uses logon trigger, failure restart, no time limit, and hidde
   assert.match(xml, /<RunLevel>LeastPrivilege<\/RunLevel>/);
   assert.match(xml, /<Command>wscript\.exe<\/Command>/);
   assert.match(xml, /"C:\\Program Files\\CXX\\run-hidden\.vbs" "C:\\Program Files\\CXX\\cxx-daemon\.exe" "C:\\Program Files\\CXX" "start"/);
+});
+
+test("currentUserId reads the canonical non-ASCII Windows identity through a UTF-8 pipe", () => {
+  let invocation;
+  const userId = currentUserId({
+    USERDOMAIN: "FALLBACK",
+    USERNAME: "FallbackUser",
+  }, (...args) => {
+    invocation = args;
+    return { status: 0, stdout: "中文电脑\\张三\r\n", stderr: "" };
+  });
+  assert.equal(userId, "中文电脑\\张三");
+  assert.equal(invocation[0], "powershell");
+  assert.ok(invocation[1].includes("-NonInteractive"));
+  assert.match(invocation[1].at(-1), /OutputEncoding.*UTF8/);
+  assert.equal(invocation[2].encoding, "utf8");
+});
+
+test("currentUserId preserves non-ASCII environment fallback values", () => {
+  const userId = currentUserId({
+    USERDOMAIN: "中文电脑",
+    COMPUTERNAME: "IGNORED-PC",
+    USERNAME: "张三",
+  }, () => ({ status: 1, stdout: "", stderr: "failed" }));
+  assert.equal(userId, "中文电脑\\张三");
+});
+
+test("buildTaskXml preserves a non-ASCII Windows account name", () => {
+  const xml = buildTaskXml({
+    program: "C:\\Program Files\\CXX\\cxx-daemon.exe",
+    args: ["start"],
+    workingDir: "C:\\Program Files\\CXX",
+    userId: "中文电脑\\张三",
+    vbs: "C:\\Program Files\\CXX\\run-hidden.vbs",
+  });
+  assert.equal(xml.match(/<UserId>中文电脑\\张三<\/UserId>/g)?.length, 2);
 });
 
 test("enable writes UTF-16LE BOM task XML, creates task, then runs it", () => {

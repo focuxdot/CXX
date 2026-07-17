@@ -95,16 +95,28 @@ export function buildTaskXml({ program, args = [], workingDir, userId, vbs }) {
 `;
 }
 
-export function currentUserId() {
+export function currentUserId(env = process.env, run = spawnSync) {
+  // `whoami` writes using the active OEM code page, so decoding its redirected
+  // output as UTF-8 corrupts non-ASCII account names. WindowsIdentity gives the
+  // canonical account (including domain/AzureAD forms); force its pipe to UTF-8.
   try {
-    const res = spawnSync("whoami", [], { encoding: "utf8" });
+    const script = [
+      "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8",
+      "[System.Security.Principal.WindowsIdentity]::GetCurrent().Name",
+    ].join("; ");
+    const res = run("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], {
+      encoding: "utf8",
+      windowsHide: true,
+    });
     const user = String(res.stdout || "").trim();
     if (res.status === 0 && user.includes("\\")) return user;
   } catch {
     // Fall through to environment fallback.
   }
-  const authority = process.env.COMPUTERNAME || process.env.USERDOMAIN || ".";
-  return `${authority}\\${process.env.USERNAME || "user"}`;
+  // Environment values come from Windows as Unicode and remain a safe fallback.
+  const authority = String(env.USERDOMAIN || env.COMPUTERNAME || ".").trim() || ".";
+  const username = String(env.USERNAME || "user").trim() || "user";
+  return `${authority}\\${username}`;
 }
 
 function defaultRunSchtasks(args) {
