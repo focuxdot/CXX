@@ -5,6 +5,11 @@
 
 发布 `vX.Y.Z` tag 时，CI 会自动把对应版本段落作为 GitHub Release 的说明。早于 0.1.9 的版本变更未整理到本文件，可查看 [GitHub Releases](https://github.com/focuxdot/CXX/releases) 与提交历史。
 
+## [0.1.11] - 2026-07-17
+
+### 修复
+- **Windows 中文账户名无法开启 CXX**。不再把 `whoami` 的本地代码页输出误当 UTF-8；改用 Windows 身份 API 获取规范账户名并显式输出 UTF-8，环境变量回退路径也保持 Unicode，确保中文电脑名、域名和用户名能完整写入计划任务的 `UserId`。
+
 ## [0.1.10] - 2026-07-14
 
 ### 修复
