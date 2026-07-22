@@ -31,7 +31,7 @@
 
 - 阻止旧 daemon 在冲突路径上完成 WebSocket 升级，避免每次失败都产生已接受又关闭的连接生命周期；
 - 不改变当前版本 daemon 的自动接管能力和 2–5 分钟冲突冷却；
-- 让运营方在旧客户端开始冲突时及时收到一次通知，同时避免告警风暴；
+- 保留旧客户端冲突的 Analytics Engine 观测数据，不发送运维通知；
 - 保持正常转发、心跳、休眠恢复、同实例重连和 stale owner 接管行为不变；
 - 让官方 Worker 与 Node 自托管中继具有相同的 owner 冲突决策。
 
@@ -94,20 +94,9 @@ Analytics Engine 始终记录拒绝事件及原因。统计层不得通过 `vers
 
 client 路径不改变。Node 与 Worker 必须调用同一个共享 owner 动作函数，避免自托管环境出现不同冲突语义。
 
-## 6. 告警与去重
+## 6. 冲突观测
 
-仅 `legacy_owner_conflict` 触发运营告警。告警状态保存在对应 Durable Object 的 storage 中：
-
-- key：`legacyConflictNotifiedAt`；
-- 冷却：1 小时；
-- 第一次冲突或冷却到期后：先写入新的时间戳，再发送 Telegram；
-- 冷却内的后续冲突：继续写 Analytics Engine，但不再通知。
-
-顺序必须是 `storage.get` → 判断 → `storage.put` → Telegram。Durable Object 的 storage input/output gates 用于避免并发冲突重复通知；不能用内存变量，因为 DO 可能在两次旧客户端重试之间休眠。
-
-hook 继续通过 `state.waitUntil()` 异步执行。storage、Analytics Engine 或 Telegram 的任何失败都只记录日志并 fail-open，不得改变 409 响应、健康 owner 或正常转发。
-
-通知只包含 daemonId、app、OS、国家/地区、版本和拒绝原因等连接元数据，不包含消息内容、令牌或端到端加密信封。
+`legacy_owner_conflict` 和 `owner_conflict` 都继续写入 Analytics Engine 的 `daemon_rejected` 事件及原因字段，用于趋势观测。冲突不读写 Durable Object 的通知状态，也不发送 Telegram 或其他运维通知。Analytics Engine 失败仍 fail-open，不得改变 409 响应、健康 owner 或正常转发。
 
 ## 7. 容量效果与剩余风险
 
@@ -154,13 +143,11 @@ daemon 重试逻辑增加 `owner_conflict` 拒绝帧处理，并保留现有 100
 - 验证失败握手不会清空重试退避；
 - Node 自托管中继同样在升级前返回 409。
 
-### 告警与故障
+### 观测与故障
 
-- 第一次 legacy 冲突立即写入冷却并通知；
-- 一小时内重复冲突只记录 Analytics Engine；
-- DO 休眠/重建后冷却仍有效；
-- 并发 legacy 冲突只产生一次通知；
-- storage、Analytics Engine、Telegram 分别失败时，连接决策与健康 owner 均不受影响。
+- legacy 与当前客户端冲突都记录 Analytics Engine；
+- legacy 冲突不读写通知冷却状态，不调用 Telegram；
+- Analytics Engine 失败时，连接决策与健康 owner 均不受影响。
 
 ### 回归
 
@@ -184,7 +171,7 @@ daemon 重试逻辑增加 `owner_conflict` 拒绝帧处理，并保留现有 100
 - legacy 冲突路径没有 101、没有 accepted rejected socket；
 - 单个持续冲突的旧实例稳定在 120–240 次尝试/小时（均值目标约 160 次/小时），而不是秒级风暴；
 - 当前 daemon 的显式拒绝帧、1008 兼容路径与 2–5 分钟接管探测均正常；
-- 同一 daemonId 的 legacy 告警不超过 1 次/小时；
+- legacy 冲突仍记录 `daemon_rejected` Analytics Engine 事件，但不产生运维通知；
 - 正常转发、心跳、休眠恢复和 stale owner 接管测试全部通过。
 
 若只看到请求下降但未验证正常接入和 stale owner 接管，不视为上线成功。
@@ -203,3 +190,5 @@ daemon 重试逻辑增加 `owner_conflict` 拒绝帧处理，并保留现有 100
 - 官方与公开 Worker 的 `wrangler deploy --dry-run` 均通过。
 
 Wrangler 本地模拟器和生产边缘都没有可靠交付“101 返回前立即 close”的 1008。Worker 已改为显式 `owner_conflict` 帧，daemon 收到后主动关闭；Node 自托管继续用已验证可交付的 1008。生产部署后仍须按第 10 节使用合成 daemonId 验证拒绝帧实际送达，再判定上线完成。
+
+2026-07-22 已移除 legacy 冲突的 Telegram 运维通知及 `legacyConflictNotifiedAt` 冷却状态读写；冲突拒绝和 Analytics Engine 记录保持不变。

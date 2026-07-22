@@ -7,11 +7,8 @@ export function createStatsHooks({ productLabel = "cxx" } = {}) {
     daemonClose({ env, daemonId, durationSec, code, wasClean, meta }) {
       track(env, "daemon_close", daemonId, [durationSec, code, wasClean ? 1 : 0], meta);
     },
-    daemonRejected({ env, storage, daemonId, meta, reason }) {
+    daemonRejected({ env, daemonId, meta, reason }) {
       track(env, "daemon_rejected", daemonId, [0], meta, reason);
-      if (reason === "legacy_owner_conflict") {
-        return maybeNotifyLegacyConflict(env, storage, daemonId, meta, productLabel);
-      }
     },
     clientOpen({ env, daemonId, clientCount, online, meta }) {
       track(env, "client_open", daemonId, [0, clientCount, online ? 1 : 0], meta);
@@ -121,55 +118,6 @@ function track(env, event, daemonId, doubles, meta = {}, reason = "") {
     });
   } catch {
     // Metrics must never affect relay forwarding.
-  }
-}
-
-const LEGACY_CONFLICT_NOTIFY_KEY = "legacyConflictNotifiedAt";
-const LEGACY_CONFLICT_NOTIFY_COOLDOWN_MS = 60 * 60_000;
-
-async function maybeNotifyLegacyConflict(env, storage, daemonId, meta = {}, productLabel) {
-  try {
-    if (isSyntheticProbeDaemon(daemonId)) {
-      console.info(JSON.stringify({ event: "telegram_notify_skip", reason: "synthetic_probe", daemonId }));
-      return;
-    }
-    const now = Date.now();
-    const notifiedAt = Number(await storage.get(LEGACY_CONFLICT_NOTIFY_KEY)) || 0;
-    if (notifiedAt && now - notifiedAt < LEGACY_CONFLICT_NOTIFY_COOLDOWN_MS) {
-      return;
-    }
-
-    // 先持久化再做外部 I/O；DO storage input/output gates 保证并发请求不会重复认领通知。
-    await storage.put(LEGACY_CONFLICT_NOTIFY_KEY, now);
-
-    const app = displayText(appLabel(meta.app || productLabel));
-    const os = displayText(osLabel(meta.os));
-    const country = displayText(countryLabel(meta.country));
-    const version = displayText(meta.version);
-    let msg = `<b>${telegramEsc(app)} · 旧客户端连接冲突</b>\n\n`;
-    msg += `• ID：<code>${telegramEsc(daemonId)}</code>\n`;
-    if (os !== "未知") msg += `• 系统：<b>${telegramEsc(os)}</b>\n`;
-    if (country !== "未知") msg += `• 地区：<b>${telegramEsc(country)}</b>\n`;
-    if (version !== "未知") msg += `• 版本：<b>${telegramEsc(version)}</b>\n`;
-    msg += "• 处理：已在 WebSocket 升级前拒绝，1 小时内不重复通知";
-
-    const result = await notifyTelegram(env, msg);
-    if (!result?.skipped) {
-      console.info(JSON.stringify({
-        event: "telegram_notify_sent",
-        reason: "legacy_owner_conflict",
-        daemonId,
-        status: result.status,
-      }));
-    }
-  } catch (e) {
-    console.error(JSON.stringify({
-      event: "telegram_notify_error",
-      reason: "legacy_owner_conflict",
-      daemonId,
-      message: String(e?.message || e),
-    }));
-    // Notification/storage failures must never affect relay ownership or forwarding.
   }
 }
 

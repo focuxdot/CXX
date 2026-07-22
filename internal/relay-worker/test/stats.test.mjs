@@ -3,38 +3,27 @@ import test from "node:test";
 
 import { createStatsHooks } from "../src/stats.mjs";
 
-test("legacy conflict records its reason and persists cooldown before notifying", async () => {
+test("legacy conflict records its reason without sending an operations notification", async () => {
   const originalFetch = globalThis.fetch;
-  const originalNow = Date.now;
-  const originalInfo = console.info;
-  const writes = [];
-  const storage = new Map();
-  const storageApi = {
-    async get(key) { return storage.get(key); },
-    async put(key, value) {
-      writes.push({ key, value });
-      storage.set(key, value);
-    },
-  };
   const points = [];
-  const notifications = [];
+  let notifications = 0;
   const env = {
     AE: { writeDataPoint(point) { points.push(point); } },
     TG_BOT_TOKEN: "test-token",
     TG_CHAT_ID: "test-chat",
   };
-  Date.now = () => 1_000_000;
-  console.info = () => {};
-  globalThis.fetch = async (_url, init) => {
-    notifications.push(JSON.parse(init.body));
-    assert.equal(writes.length, 1, "cooldown must be persisted before Telegram I/O");
+  globalThis.fetch = async () => {
+    notifications += 1;
     return new Response("ok", { status: 200 });
   };
   try {
     const hooks = createStatsHooks({ productLabel: "cxx" });
     const payload = {
       env,
-      storage: storageApi,
+      storage: {
+        get() { throw new Error("legacy conflicts must not read notification state"); },
+        put() { throw new Error("legacy conflicts must not write notification state"); },
+      },
       daemonId: "daemon123",
       reason: "legacy_owner_conflict",
       meta: { app: "cxx", os: "darwin", country: "SG", version: "0.1.7" },
@@ -44,13 +33,9 @@ test("legacy conflict records its reason and persists cooldown before notifying"
 
     assert.equal(points.length, 2, "every conflict remains observable");
     assert.equal(points[0].blobs[7], "legacy_owner_conflict");
-    assert.deepEqual(writes, [{ key: "legacyConflictNotifiedAt", value: 1_000_000 }]);
-    assert.equal(notifications.length, 1, "cooldown suppresses duplicate Telegram alerts");
-    assert.match(notifications[0].text, /旧客户端连接冲突/);
+    assert.equal(notifications, 0, "legacy conflicts must not notify Telegram");
   } finally {
     globalThis.fetch = originalFetch;
-    Date.now = originalNow;
-    console.info = originalInfo;
   }
 });
 
@@ -116,38 +101,5 @@ test("synthetic probe daemons record analytics without Telegram notifications", 
   } finally {
     globalThis.fetch = originalFetch;
     console.info = originalInfo;
-  }
-});
-
-test("legacy notification failures are fail-open", async () => {
-  const originalFetch = globalThis.fetch;
-  const errors = [];
-  const originalError = console.error;
-  const storage = new Map();
-  let notifications = 0;
-  globalThis.fetch = async () => {
-    notifications += 1;
-    return new Response("no", { status: 500 });
-  };
-  console.error = (line) => errors.push(line);
-  try {
-    const hooks = createStatsHooks();
-    const payload = {
-      env: { TG_BOT_TOKEN: "test-token", TG_CHAT_ID: "test-chat" },
-      storage: {
-        async get(key) { return storage.get(key); },
-        async put(key, value) { storage.set(key, value); },
-      },
-      daemonId: "daemon123",
-      reason: "legacy_owner_conflict",
-      meta: {},
-    };
-    await assert.doesNotReject(hooks.daemonRejected(payload));
-    await assert.doesNotReject(hooks.daemonRejected(payload));
-    assert.equal(notifications, 1, "persisted cooldown suppresses retries after Telegram failure");
-    assert.ok(errors.some((line) => /telegram_notify_error/.test(line)));
-  } finally {
-    globalThis.fetch = originalFetch;
-    console.error = originalError;
   }
 });
