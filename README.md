@@ -132,9 +132,13 @@ cxx notify --add bark     --key <key>            # Bark（iOS，可 --server 自
 cxx notify --add wecom    --url <url>            # 企业微信群机器人
 cxx notify --add dingtalk --url <url>            # 钉钉群机器人
 cxx notify --add custom   --url <url>            # 自定义 webhook
+cxx notify --add onebot11 --url http://127.0.0.1:4531/send_msg \
+  --target private:<QQ号> [--token <NapCat令牌>]    # NapCat OneBot 11 纯文本
 cxx notify --test                               # 发测试通知
 cxx notify --list                               # 查看 / --remove <序号> 删除
 ```
+
+OneBot 11 使用 NapCat 的 **HTTP 服务器**，不是 HTTP 客户端。CXX 与 NapCat 在同一台服务器时，NapCat 监听 `127.0.0.1`，CXX 使用 `http://127.0.0.1:4531/send_msg`；分开部署时，NapCat 监听 `0.0.0.0`，CXX 使用 NapCat 所在服务器的地址，并建议配置令牌和防火墙白名单。`--target` 支持 `private:<QQ号>` 和 `group:<群号>`，消息以字符串发送并保持 CXX 原有通知内容。
 
 > [!NOTE]
 > `cxx` 是安装器（DMG / Windows 安装包）自动装到 PATH 上的全局命令，直接指向 App 内的同一个后台二进制——`cxx pair`、`cxx status`、`cxx devices` 等子命令同样可用。从源码运行则把 `cxx` 换成 `node daemon/src/main.mjs`。

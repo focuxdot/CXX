@@ -45,7 +45,7 @@ export function loadOrCreateConfig(path = defaultConfigPath()) {
     claudePermissionMode: "default",
     appServerPort: 19271,
     preventSleep: true, // 有设备在线或任务运行时阻止系统睡眠（允许关屏）
-    notifiers: [], // webhook 通知渠道 [{type:"bark",key} | {type:"wecom",url} ...]
+    notifiers: [], // webhook 通知渠道 [{type:"bark",key} | {type:"onebot11",url,targetType,targetId,token?} ...]
     devices: [],
     pairTokens: [],
   };

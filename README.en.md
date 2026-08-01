@@ -133,9 +133,13 @@ cxx notify --add bark     --key <key>            # Bark (iOS, --server for self-
 cxx notify --add serverchan --key <SendKey>      # ServerChan (WeChat), get a SendKey at https://sct.ftqq.com/
 cxx notify --add wecom    --url <url>            # WeCom group bot
 cxx notify --add dingtalk --url <url>            # DingTalk group bot
+cxx notify --add onebot11 --url http://127.0.0.1:4531/send_msg \
+  --target private:<QQ number> [--token <NapCat token>] # NapCat OneBot 11 text
 cxx notify --test                               # send a test notification
 cxx notify --list                               # list / --remove <index> to delete
 ```
+
+OneBot 11 uses NapCat's **HTTP server**, not its HTTP client. When CXX and NapCat run on the same server, bind NapCat to `127.0.0.1` and use `http://127.0.0.1:4531/send_msg`; for separate hosts, bind NapCat to `0.0.0.0`, use its server address, and protect the endpoint with a token and firewall allowlist. `--target` accepts `private:<QQ number>` or `group:<group number>`. Messages are sent as plain strings without changing CXX's existing notification content.
 
 > [!NOTE]
 > `cxx` is the global command the installer (DMG / Windows setup) drops onto your PATH — it points at the same background binary inside the app. `cxx pair`, `cxx status`, `cxx devices`, etc. all work; run `cxx help` for the full list. Running from source, replace `cxx` with `node daemon/src/main.mjs`.
