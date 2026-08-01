@@ -75,5 +75,6 @@ test("OneBot 11 业务失败响应会记录失败日志", async () => {
 
   assert.equal(logs.length, 1);
   assert.match(logs[0], /HTTP 200/);
+  assert.match(logs[0], /status failed/);
   assert.match(logs[0], /retcode 100/);
 });

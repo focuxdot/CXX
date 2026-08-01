@@ -64,3 +64,23 @@ test("CLI 拒绝非法 OneBot 目标", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("CLI 拒绝非 HTTP(S) 的 OneBot 地址", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cxx-notify-"));
+  const configPath = join(dir, "daemon.json");
+  try {
+    const result = runNotify(configPath, [
+      "--add",
+      "onebot11",
+      "--url",
+      "ftp://127.0.0.1:4531/send_msg",
+      "--target",
+      "private:3102048152",
+    ]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /http/);
+    assert.deepEqual(JSON.parse(readFileSync(configPath, "utf8")).notifiers, []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

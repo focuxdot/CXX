@@ -11,6 +11,16 @@ export function parseOneBotTarget(value) {
   return { targetType: match[1], targetId: match[2] };
 }
 
+export function isHttpUrl(value) {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function normalizeNotifier(n) {
   if (n?.type !== "bark" || typeof n.key !== "string") return n;
   const raw = n.key.trim();
@@ -76,7 +86,7 @@ export function buildRequest(n, title, body, link) {
     case "onebot11": {
       const target = parseOneBotTarget(`${n.targetType}:${n.targetId}`);
       const url = typeof n.url === "string" ? n.url.trim() : "";
-      if (!target || !url) return null;
+      if (!target || !isHttpUrl(url)) return null;
       const targetField = target.targetType === "private" ? "user_id" : "group_id";
       const headers = {};
       if (typeof n.token === "string" && n.token.trim()) {
@@ -143,11 +153,11 @@ export class Notifier {
 
   // 并发发送到所有已配置渠道；单个失败不影响其他，只记日志
   async send(title, body, link) {
-    if (this.#notifiers.length === 0) return;
-    await Promise.allSettled(
+    if (this.#notifiers.length === 0) return true;
+    const results = await Promise.allSettled(
       this.#notifiers.map(async (n) => {
         const req = buildRequest(n, title, body, link);
-        if (!req?.url) return;
+        if (!req?.url) return false;
         try {
           const res = await this.#fetch(req.url, {
             ...req.init,
@@ -155,7 +165,7 @@ export class Notifier {
           });
           if (!res.ok) {
             this.#log(`通知发送失败 ${redact(n)}: HTTP ${res.status}`);
-            return;
+            return false;
           }
           if (n.type === "onebot11") {
             let result;
@@ -163,18 +173,22 @@ export class Notifier {
               result = await res.json();
             } catch {
               this.#log(`通知发送失败 ${redact(n)}: HTTP ${res.status}, 响应不是有效的 OneBot 11 JSON`);
-              return;
+              return false;
             }
             if (result?.status !== "ok" || result?.retcode !== 0) {
               this.#log(
-                `通知发送失败 ${redact(n)}: HTTP ${res.status}, OneBot retcode ${result?.retcode ?? "未知"}`,
+                `通知发送失败 ${redact(n)}: HTTP ${res.status}, OneBot status ${result?.status ?? "未知"}, retcode ${result?.retcode ?? "未知"}`,
               );
+              return false;
             }
           }
+          return true;
         } catch (err) {
           this.#log(`通知发送异常 ${redact(n)}: ${err.message}`);
+          return false;
         }
       }),
     );
+    return results.every((result) => result.status === "fulfilled" && result.value === true);
   }
 }
