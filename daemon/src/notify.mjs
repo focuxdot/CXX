@@ -4,6 +4,13 @@
 const TIMEOUT_MS = 8000;
 const DEFAULT_BARK_SERVER = "https://api.day.app";
 
+export function parseOneBotTarget(value) {
+  if (typeof value !== "string") return null;
+  const match = /^(private|group):([1-9]\d*)$/.exec(value.trim());
+  if (!match) return null;
+  return { targetType: match[1], targetId: match[2] };
+}
+
 export function normalizeNotifier(n) {
   if (n?.type !== "bark" || typeof n.key !== "string") return n;
   const raw = n.key.trim();
@@ -66,6 +73,28 @@ export function buildRequest(n, title, body, link) {
     case "custom":
       // 自定义 webhook：收 {title, body, source, link?}
       return { url: n.url, init: json({ title, body, source: "cxx-remote", ...(link ? { link } : {}) }) };
+    case "onebot11": {
+      const target = parseOneBotTarget(`${n.targetType}:${n.targetId}`);
+      const url = typeof n.url === "string" ? n.url.trim() : "";
+      if (!target || !url) return null;
+      const targetField = target.targetType === "private" ? "user_id" : "group_id";
+      const headers = {};
+      if (typeof n.token === "string" && n.token.trim()) {
+        headers.authorization = `Bearer ${n.token.trim()}`;
+      }
+      return {
+        url,
+        init: json(
+          {
+            message_type: target.targetType,
+            [targetField]: target.targetId,
+            message: withLink(title, body, link),
+            auto_escape: true,
+          },
+          headers,
+        ),
+      };
+    }
     default:
       return null;
   }
@@ -75,10 +104,10 @@ function withLink(title, body, link) {
   return link ? `${title}\n${body}\n${link}` : `${title}\n${body}`;
 }
 
-function json(obj) {
+function json(obj, headers = {}) {
   return {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify(obj),
   };
 }
@@ -124,7 +153,24 @@ export class Notifier {
             ...req.init,
             signal: AbortSignal.timeout(TIMEOUT_MS),
           });
-          if (!res.ok) this.#log(`通知发送失败 ${redact(n)}: HTTP ${res.status}`);
+          if (!res.ok) {
+            this.#log(`通知发送失败 ${redact(n)}: HTTP ${res.status}`);
+            return;
+          }
+          if (n.type === "onebot11") {
+            let result;
+            try {
+              result = await res.json();
+            } catch {
+              this.#log(`通知发送失败 ${redact(n)}: HTTP ${res.status}, 响应不是有效的 OneBot 11 JSON`);
+              return;
+            }
+            if (result?.status !== "ok" || result?.retcode !== 0) {
+              this.#log(
+                `通知发送失败 ${redact(n)}: HTTP ${res.status}, OneBot retcode ${result?.retcode ?? "未知"}`,
+              );
+            }
+          }
         } catch (err) {
           this.#log(`通知发送异常 ${redact(n)}: ${err.message}`);
         }
